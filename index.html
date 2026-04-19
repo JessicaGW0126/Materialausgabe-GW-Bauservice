@@ -666,7 +666,6 @@
             }
         }
 
-        // Rückgabe-Eintrag mit PDF-Daten speichern
         const returnRecord = {
             id: timestamp,
             timestamp: timestamp,
@@ -680,7 +679,6 @@
             signature: signatureData
         };
         
-        // PDF generieren und als DataURL speichern
         const pdfDataUrl = await generatePDFDataUrl(null, true, returnRecord);
         returnRecord.pdfDataUrl = pdfDataUrl;
         
