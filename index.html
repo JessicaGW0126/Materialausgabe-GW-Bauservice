@@ -293,7 +293,6 @@
             <button class="orange" onclick="showEmployeeMaterials()" style="width:100%; margin-top:10px;">🔍 Materialien anzeigen</button>
         </div>
 
-        <!-- Materialien des Mitarbeiters -->
         <div id="returnMaterialSection" class="hidden">
             <div class="material-section">
                 <div class="section-box">
@@ -350,8 +349,8 @@
     let employees = [], materials = [], issues = [], returnHistory = [];
     let currentCart = [];
     let currentReturnEmployee = '';
-    let currentReturnItems = [];       // [{name, count}]
-    let currentReturnSelections = [];   // [{name, totalBorrowed, returnQuantity}]
+    let currentReturnItems = [];
+    let currentReturnSelections = [];
     let canvas, ctx, returnCanvas, returnCtx;
     let isDrawing = false;
 
@@ -596,33 +595,92 @@
         alert("✅ Ausgabe erfolgreich gespeichert!");
     }
 
-    // ===================== AUSGABE PDF =====================
-    async function generateIssuePDF(issue) {
-        const printDiv = document.createElement('div');
-        printDiv.style.cssText = "padding:40px; font-family:Arial; width:800px; background:#fff;";
-        printDiv.innerHTML = `
-            <h1 style="color:#333; border-bottom:2px solid #007aff; padding-bottom:10px;">Übergabeprotokoll Material</h1>
-            <p><strong>Datum:</strong> ${issue.date}</p>
-            <p><strong>Herausgeber:</strong> ${issue.issuer}</p>
-            <p><strong>Empfänger:</strong> ${issue.employee}</p>
-            <h3 style="margin-top:20px;">Übergebene Materialien:</h3>
-            <ul style="list-style:none; padding:0;">${issue.items.map(item => `<li style="padding:5px 0; border-bottom:1px solid #eee;">☑ ${item}</li>`).join('')}</ul>
-            <p style="margin-top:30px;"><strong>Unterschrift Empfänger:</strong></p>
-            <img src="${issue.signature}" style="border:1px solid #000; max-width:400px; margin-top:10px;">
-            <p style="margin-top:30px; color:#888; font-size:12px;">GW Bauservice – Materialverwaltung</p>
-        `;
-        document.body.appendChild(printDiv);
-        try {
-            const canvasImg = await html2canvas(printDiv, { scale: 2 });
-            const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
-            const imgHeight = (canvasImg.height * 210) / canvasImg.width;
-            pdf.addImage(canvasImg.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 210, imgHeight);
-            pdf.save(`Ausgabe_${issue.employee}_${issue.id}.pdf`);
-        } catch (err) {
-            console.error("PDF Fehler:", err);
-            alert("PDF konnte nicht erstellt werden.");
+    // ===================== AUSGABE PDF (NEUES DESIGN wie Rückgabe) =====================
+    function generateIssuePDF(issue) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        // Header
+        doc.setFontSize(22);
+        doc.setTextColor(50, 50, 50);
+        doc.text("GW BAUSERVICE", 105, 20, null, null, "center");
+
+        doc.setFontSize(16);
+        doc.setTextColor(0, 122, 255);
+        doc.text("Ausgabe-Beleg", 105, 30, null, null, "center");
+
+        // Linie
+        doc.setDrawColor(0, 122, 255);
+        doc.setLineWidth(0.5);
+        doc.line(20, 35, 190, 35);
+
+        // Infos
+        doc.setFontSize(12);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Datum: ${issue.date}`, 20, 48);
+        doc.text(`Herausgeber: ${issue.issuer}`, 20, 58);
+        doc.text(`Empfänger: ${issue.employee}`, 20, 68);
+
+        // Materialien Tabelle
+        doc.setFontSize(14);
+        doc.setTextColor(50, 50, 50);
+        doc.text("Übergebene Materialien:", 20, 85);
+
+        doc.setFontSize(12);
+        doc.setTextColor(0, 0, 0);
+        let yPos = 98;
+
+        // Tabellenkopf
+        doc.setFillColor(240, 240, 240);
+        doc.rect(20, yPos - 6, 170, 10, 'F');
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text("Nr.", 25, yPos);
+        doc.text("Material", 40, yPos);
+        doc.text("Anzahl", 160, yPos);
+        yPos += 12;
+
+        // Materialien gruppieren und zählen
+        let itemCounts = {};
+        issue.items.forEach(item => { itemCounts[item] = (itemCounts[item] || 0) + 1; });
+
+        doc.setFont(undefined, 'normal');
+        let nr = 1;
+        for (let [name, count] of Object.entries(itemCounts)) {
+            doc.text(`${nr}.`, 25, yPos);
+            doc.text(`${name}`, 40, yPos);
+            doc.text(`${count}x`, 165, yPos);
+            // Trennlinie
+            doc.setDrawColor(220, 220, 220);
+            doc.line(20, yPos + 3, 190, yPos + 3);
+            yPos += 10;
+            nr++;
         }
-        document.body.removeChild(printDiv);
+
+        // Gesamtanzahl
+        yPos += 5;
+        doc.setFont(undefined, 'bold');
+        doc.text(`Gesamt: ${issue.items.length} Teil(e)`, 25, yPos);
+        doc.setFont(undefined, 'normal');
+
+        // Unterschrift
+        yPos += 20;
+        doc.setFontSize(12);
+        doc.text("Unterschrift Empfänger:", 20, yPos);
+        if (issue.signature) {
+            try {
+                doc.addImage(issue.signature, 'PNG', 20, yPos + 5, 80, 40);
+            } catch (e) {
+                doc.text("(Unterschrift konnte nicht geladen werden)", 20, yPos + 15);
+            }
+        }
+
+        // Footer
+        doc.setFontSize(9);
+        doc.setTextColor(150, 150, 150);
+        doc.text("GW Bauservice – Materialverwaltung | Automatisch erstellt", 105, 285, null, null, "center");
+
+        doc.save(`Ausgabe_${issue.employee}_${issue.id}.pdf`);
     }
 
     function generateIssuePDFById(id) {
@@ -650,19 +708,16 @@
         currentReturnEmployee = employeeName;
         currentReturnSelections = [];
 
-        // Alle Issues dieses Mitarbeiters finden
         const employeeIssues = issues.filter(i => i.employee === employeeName);
         const matSection = document.getElementById('returnMaterialSection');
 
         if (employeeIssues.length === 0) {
-            matSection.classList.add('hidden');
+            matSection.classList.remove('hidden');
             document.getElementById('returnAvailableMaterials').innerHTML =
                 `<p style="color:#888; text-align:center;">${esc(employeeName)} hat keine ausgeliehenen Materialien.</p>`;
-            displayReturnHistoryForEmployee(employeeName);
-            // Trotzdem anzeigen für die Historie
-            matSection.classList.remove('hidden');
             document.getElementById('returnCartItems').innerHTML =
                 '<p style="color:#888; text-align:center; padding:20px 0;">Keine Materialien vorhanden</p>';
+            displayReturnHistoryForEmployee(employeeName);
             return;
         }
 
@@ -672,9 +727,8 @@
             issue.items.forEach(item => { itemCounts[item] = (itemCounts[item] || 0) + 1; });
         });
 
-        currentReturnItems = Object.entries(itemCounts); // [[name, count], ...]
+        currentReturnItems = Object.entries(itemCounts);
 
-        // Materialien-Liste rendern
         const listDiv = document.getElementById('returnAvailableMaterials');
         listDiv.innerHTML = currentReturnItems.map(([name, count], idx) => {
             let options = '';
@@ -690,11 +744,9 @@
                     </div>`;
         }).join('');
 
-        // Rückgabe-Bereich anzeigen
         matSection.classList.remove('hidden');
         renderReturnCart();
 
-        // Return-Canvas initialisieren
         setTimeout(() => {
             if (!returnCanvas) {
                 returnCanvas = document.getElementById('returnSignaturePad');
@@ -705,7 +757,6 @@
             clearReturnSignature();
         }, 200);
 
-        // Rückgabe-Historie anzeigen
         displayReturnHistoryForEmployee(employeeName);
     }
 
@@ -714,7 +765,6 @@
         const qtySelect = document.getElementById('returnQty_' + idx);
         const qty = parseInt(qtySelect.value);
 
-        // Prüfen, ob bereits im Warenkorb
         const existing = currentReturnSelections.find(s => s.name === name);
         if (existing) {
             alert(`"${name}" ist bereits zur Rückgabe ausgewählt.\nEntfernen Sie es zuerst, um die Anzahl zu ändern.`);
@@ -759,7 +809,6 @@
         const timestamp = Date.now();
         const returnDate = formatDateTime();
 
-        // Rückgabe-Datensatz erstellen (NUR Daten, KEINE PDF in Firebase!)
         const returnRecord = {
             id: timestamp,
             timestamp: timestamp,
@@ -773,15 +822,13 @@
             signature: signatureData
         };
 
-        // 1. In Firebase speichern
         await db.ref('returnHistory/' + timestamp).set(returnRecord);
 
-        // 2. Materialien aus den Issues des Mitarbeiters abziehen
+        // Materialien aus Issues abziehen
         const employeeIssues = issues.filter(i => i.employee === currentReturnEmployee);
         let allBorrowed = [];
         employeeIssues.forEach(issue => { allBorrowed = allBorrowed.concat(issue.items); });
 
-        // Rückgegebene Mengen entfernen
         currentReturnSelections.forEach(sel => {
             for (let i = 0; i < sel.returnQuantity; i++) {
                 const index = allBorrowed.indexOf(sel.name);
@@ -789,12 +836,10 @@
             }
         });
 
-        // Alte Issues des Mitarbeiters löschen
         for (let issue of employeeIssues) {
             await db.ref('issues/' + issue.id).remove();
         }
 
-        // Neuen Issue mit verbleibenden Materialien erstellen
         if (allBorrowed.length > 0) {
             const newIssueId = Date.now() + 1;
             await db.ref('issues/' + newIssueId).set({
@@ -807,14 +852,12 @@
             });
         }
 
-        // 3. PDF automatisch generieren und herunterladen
         generateReturnPDF(returnRecord);
 
-        // 4. UI zurücksetzen
         clearReturnSignature();
         currentReturnSelections = [];
         renderReturnCart();
-        showEmployeeMaterials(); // Aktualisiert die Anzeige
+        showEmployeeMaterials();
         alert("✅ Rückgabe erfolgreich gespeichert! PDF wurde heruntergeladen.");
     }
 
@@ -867,7 +910,6 @@
             doc.text(`${item.name}`, 25, yPos);
             doc.text(`${item.returnQuantity}x`, 130, yPos);
             doc.text(`${item.totalBorrowed}x`, 168, yPos);
-            // Trennlinie
             doc.setDrawColor(220, 220, 220);
             doc.line(20, yPos + 3, 190, yPos + 3);
             yPos += 10;
@@ -924,11 +966,8 @@
 
     window.regenerateReturnPDF = function(recordId) {
         const record = returnHistory.find(r => String(r.id) === String(recordId));
-        if (record) {
-            generateReturnPDF(record);
-        } else {
-            alert("Datensatz nicht gefunden.");
-        }
+        if (record) generateReturnPDF(record);
+        else alert("Datensatz nicht gefunden.");
     };
 
     window.deleteReturn = function(recordId) {
