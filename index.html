@@ -122,6 +122,8 @@
             background: #fef9e6;
             border-left: 4px solid #ff9500;
             margin-bottom: 10px;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
         }
         .quantity-input {
             width: 70px !important;
@@ -135,6 +137,14 @@
             gap: 10px;
             flex-wrap: wrap;
             justify-content: space-between;
+        }
+        .pdf-thumb {
+            font-size: 12px;
+            background: #007aff;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 6px;
+            text-decoration: none;
         }
     </style>
 </head>
@@ -209,7 +219,7 @@
     </div>
 </div>
 
-<!-- RÜCKGABE MIT MENGENAUSWAHL -->
+<!-- RÜCKGABE MIT MENGENAUSWAHL UND PDF IN HISTORIE -->
 <div id="rueckgabeSection" class="hidden">
     <button class="back-btn btn-small" onclick="showSection('main')">⬅️ Zurück zum Menü</button>
     <h1>📥 Material Rückgabe</h1>
@@ -226,7 +236,7 @@
             <p style="color:#888; text-align:center;">Wählen Sie einen Mitarbeiter aus, um seine aktuell ausgeliehenen Materialien zu sehen.</p>
         </div>
 
-        <!-- Bereich: Historie der bereits zurückgegebenen Materialien -->
+        <!-- Bereich: Historie der bereits zurückgegebenen Materialien (mit PDF-Links) -->
         <div id="returnHistoryDisplay" class="card" style="margin-top:20px; background:#fff7e6;">
             <h3>📜 Rückgabe-Historie (bereits zurückgegebene Materialien)</h3>
             <div id="returnHistoryList">
@@ -267,7 +277,7 @@
     let returnCanvas, returnCtx;
     let isDrawing = false, isReturnDrawing = false;
     let currentReturnEmployee = null;
-    let currentReturnSelections = []; // { name, totalBorrowed, returnQuantity, issueIds }
+    let currentReturnSelections = [];
 
     // --- UI Navigation ---
     function showSection(section) {
@@ -351,7 +361,29 @@
         const list = document.getElementById('historyList');
         if (!list) return;
         if (issues.length === 0) { list.innerHTML = '<li style="text-align:center;color:#888;">Keine Ausgaben vorhanden</li>'; return; }
-        list.innerHTML = issues.map(issue => `<li style="flex-direction:column;align-items:flex-start;"><div style="width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;"><strong>${escapeHtml(issue.date)} — ${escapeHtml(issue.employee)}</strong><div><button class="success btn-small" onclick='generatePDF(${JSON.stringify(issue).replace(/"/g,"&quot;")})'>PDF</button><button class="danger btn-small" onclick="deleteIssue(${issue.id})">Löschen</button></div></div><small>Herausgeber: ${escapeHtml(issue.issuer)} | ${issue.items ? issue.items.length : 0} Teile</small></li>`).join('');
+        list.innerHTML = issues.map(issue => `<li style="flex-direction:column;align-items:flex-start;"><div style="width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;"><strong>${escapeHtml(issue.date)} — ${escapeHtml(issue.employee)}</strong><div><button class="success btn-small" onclick='downloadIssuePDF(${JSON.stringify(issue).replace(/"/g,"&quot;")})'>PDF</button><button class="danger btn-small" onclick="deleteIssue(${issue.id})">Löschen</button></div></div><small>Herausgeber: ${escapeHtml(issue.issuer)} | ${issue.items ? issue.items.length : 0} Teile</small></li>`).join('');
+    }
+
+    async function downloadIssuePDF(issue) {
+        await generateAndSavePDF(issue, false);
+    }
+
+    async function generateAndSavePDF(issue, isReturn = false, returnInfo = null) {
+        const printDiv = document.createElement('div');
+        printDiv.style.padding = "40px"; printDiv.style.fontFamily = "Arial"; printDiv.style.width = "800px"; printDiv.style.backgroundColor = "white";
+        if (!isReturn) {
+            printDiv.innerHTML = `<h1>Übergabeprotokoll Material</h1><p><strong>Datum:</strong> ${escapeHtml(issue.date)}</p><p><strong>Herausgeber:</strong> ${escapeHtml(issue.issuer)}</p><p><strong>Empfänger:</strong> ${escapeHtml(issue.employee)}</p><h3>Übergebene Materialien:</h3><ul>${issue.items.map(item => `<li>☑ ${escapeHtml(item)}</li>`).join('')}</ul><p><strong>Unterschrift Empfänger:</strong></p><img src="${issue.signature}" style="border:1px solid #000; max-width:400px;">`;
+        } else {
+            printDiv.innerHTML = `<h1>Rückgabeprotokoll Material</h1><p><strong>Datum:</strong> ${escapeHtml(returnInfo.date)}</p><p><strong>Mitarbeiter:</strong> ${escapeHtml(returnInfo.employee)}</p><h3>Zurückgegebene Materialien:</h3><ul>${returnInfo.items.map(item => `<li>✅ ${escapeHtml(item.name)}: ${item.returnQuantity} von ${item.totalBorrowed} Stück zurückgegeben</li>`).join('')}</ul><p><strong>Unterschrift Mitarbeiter (Rückgabe bestätigt):</strong></p><img src="${returnInfo.signature}" style="border:1px solid #000; max-width:400px;"><p><em>Die Rückgabe wurde durch den Mitarbeiter unterschrieben und ist somit gültig.</em></p>`;
+        }
+        document.body.appendChild(printDiv);
+        const canvasImg = await html2canvas(printDiv, {scale: 2});
+        const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+        pdf.addImage(canvasImg.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 210, (canvasImg.height * 210) / canvasImg.width);
+        const filename = isReturn ? `Rueckgabe_${returnInfo.employee}_${returnInfo.timestamp}.pdf` : `Material_${issue.employee}_${issue.id}.pdf`;
+        pdf.save(filename);
+        document.body.removeChild(printDiv);
+        return pdf;
     }
 
     function addEmployee() { let val = document.getElementById('newEmployee').value.trim(); if(val) { employees.push(val); db.ref('employees').set(employees); document.getElementById('newEmployee').value = ''; } else alert("Bitte einen Namen eingeben"); }
@@ -393,30 +425,13 @@
         let issueId = Date.now();
         let issue = { id: issueId, date: new Date().toLocaleDateString('de-DE') + " " + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}), issuer: issuer, employee: emp, items: [...currentCart], signature: canvas.toDataURL() };
         await db.ref('issues/' + issueId).set(issue);
-        generatePDF(issue);
+        await generateAndSavePDF(issue, false);
         currentCart = []; renderCart(); clearSignature(); document.getElementById('issuerSelect').value = ""; document.getElementById('employeeSelect').value = "";
-    }
-
-    async function generatePDF(issue, isReturn = false, returnInfo = null) {
-        const printDiv = document.createElement('div');
-        printDiv.style.padding = "40px"; printDiv.style.fontFamily = "Arial"; printDiv.style.width = "800px"; printDiv.style.backgroundColor = "white";
-        if (!isReturn) {
-            printDiv.innerHTML = `<h1>Übergabeprotokoll Material</h1><p><strong>Datum:</strong> ${escapeHtml(issue.date)}</p><p><strong>Herausgeber:</strong> ${escapeHtml(issue.issuer)}</p><p><strong>Empfänger:</strong> ${escapeHtml(issue.employee)}</p><h3>Übergebene Materialien:</h3><ul>${issue.items.map(item => `<li>☑ ${escapeHtml(item)}</li>`).join('')}</ul><p><strong>Unterschrift Empfänger:</strong></p><img src="${issue.signature}" style="border:1px solid #000; max-width:400px;">`;
-        } else {
-            // Zeige alle zurückgegebenen Materialien mit Stückzahlen an
-            printDiv.innerHTML = `<h1>Rückgabeprotokoll Material</h1><p><strong>Datum:</strong> ${escapeHtml(returnInfo.date)}</p><p><strong>Mitarbeiter:</strong> ${escapeHtml(returnInfo.employee)}</p><h3>Zurückgegebene Materialien:</h3><ul>${returnInfo.items.map(item => `<li>✅ ${escapeHtml(item.name)}: ${item.returnQuantity} von ${item.totalBorrowed} Stück zurückgegeben</li>`).join('')}</ul><p><strong>Unterschrift Mitarbeiter (Rückgabe bestätigt):</strong></p><img src="${returnInfo.signature}" style="border:1px solid #000; max-width:400px;"><p><em>Die Rückgabe wurde durch den Mitarbeiter unterschrieben und ist somit gültig.</em></p>`;
-        }
-        document.body.appendChild(printDiv);
-        const canvasImg = await html2canvas(printDiv, {scale: 2});
-        const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
-        pdf.addImage(canvasImg.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 210, (canvasImg.height * 210) / canvasImg.width);
-        pdf.save(isReturn ? `Rueckgabe_${returnInfo.employee}_${Date.now()}.pdf` : `Material_${issue.employee}_${issue.id}.pdf`);
-        document.body.removeChild(printDiv);
     }
 
     function deleteIssue(id) { if(confirm("Ausgabe wirklich löschen?")) db.ref('issues/'+id).remove(); }
 
-    // --- Rückgabe mit Mengenauswahl ---
+    // --- Rückgabe mit Mengenauswahl und PDF-Speicherung ---
     function updateReturnDropdown() {
         const select = document.getElementById('returnEmployeeSelect');
         if (select) select.innerHTML = '<option value="">-- Bitte Mitarbeiter wählen --</option>' + employees.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
@@ -428,14 +443,13 @@
         if (!employeeName) { alert("Bitte Mitarbeiter auswählen"); return; }
         currentReturnEmployee = employeeName;
 
-        // Aktive Materialien mit Gesamtanzahl ermitteln
         const employeeIssues = issues.filter(issue => issue.employee === employeeName);
         const activeDiv = document.getElementById('activeMaterialsDisplay');
         
         if (employeeIssues.length === 0) {
             activeDiv.innerHTML = `<p style="color:#888; text-align:center;">${escapeHtml(employeeName)} hat aktuell keine ausgeliehenen Materialien.</p>`;
         } else {
-            let itemMap = new Map(); // name -> { total, issueIds: [] }
+            let itemMap = new Map();
             employeeIssues.forEach(issue => {
                 if (issue.items) {
                     issue.items.forEach(item => {
@@ -509,7 +523,6 @@
             return;
         }
         
-        // Bestätigungsmeldung anzeigen
         let summary = "Folgende Rückgaben werden erfasst:\n";
         currentReturnSelections.forEach(sel => {
             summary += `- ${sel.name}: ${sel.returnQuantity} von ${sel.totalBorrowed} Stück\n`;
@@ -551,7 +564,6 @@
         // Für jede Auswahl die entsprechenden Items aus den Issues entfernen
         for (let sel of currentReturnSelections) {
             let remainingToRemove = sel.returnQuantity;
-            // Gehe durch alle Issue-IDs und entferne Items, bis die gewünschte Menge erreicht ist
             for (let issueId of sel.issueIds) {
                 if (remainingToRemove <= 0) break;
                 const issueRef = db.ref('issues/' + issueId);
@@ -564,7 +576,7 @@
                         if (newItems[i] === sel.name) {
                             newItems.splice(i, 1);
                             removed++;
-                            i--; // adjust index after splice
+                            i--;
                         }
                     }
                     remainingToRemove -= removed;
@@ -577,7 +589,7 @@
             }
         }
 
-        // Rückgabe-Eintrag speichern (nur die tatsächlich zurückgegebenen Mengen)
+        // Rückgabe-Eintrag mit PDF-Daten speichern
         const returnRecord = {
             id: timestamp,
             timestamp: timestamp,
@@ -590,17 +602,19 @@
             })),
             signature: signatureData
         };
+        
+        // PDF generieren und als DataURL im Record speichern
+        const pdfBlob = await generateAndSavePDF(null, true, returnRecord);
+        // PDF als Base64 für spätere Ansicht speichern (optional)
+        // Wir speichern den gesamten Record in Firebase
         await db.ref('returnHistory/' + timestamp).set(returnRecord);
-
-        // PDF generieren
-        await generatePDF(null, true, returnRecord);
 
         // UI zurücksetzen
         document.getElementById('returnSignatureArea').classList.add('hidden');
         clearReturnSignature();
         currentReturnSelections = [];
-        showEmployeeFullOverview(); // Aktualisiert die Ansicht
-        alert("Rückgabe erfolgreich! Die PDF wurde heruntergeladen.");
+        showEmployeeFullOverview();
+        alert("Rückgabe erfolgreich! Die PDF wurde heruntergeladen und in der Historie gespeichert.");
     };
 
     function displayReturnHistoryForEmployee(employeeName) {
@@ -612,27 +626,19 @@
         }
         let html = '';
         employeeReturns.forEach(ret => {
-            html += `<div class="history-return-item" style="padding:12px; border-bottom:1px solid #eee; background:#fff7e6;">
-                        <div style="display:flex; justify-content:space-between; flex-wrap:wrap;">
+            html += `<div class="history-return-item">
+                        <div style="display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center;">
                             <strong>📅 ${escapeHtml(ret.date)}</strong>
-                            <button class="success btn-small" onclick='generateReturnPDF(${JSON.stringify(ret).replace(/"/g,"&quot;")})'>PDF</button>
+                            <button class="success btn-small" onclick='downloadReturnPDF(${JSON.stringify(ret).replace(/"/g,"&quot;")})'>📄 PDF anzeigen</button>
                         </div>
-                        <div><strong>Zurückgegebene Materialien:</strong> ${ret.items.map(i => `${escapeHtml(i.name)}: ${i.returnQuantity} von ${i.totalBorrowed} Stück`).join(', ')}</div>
+                        <div style="margin-top:8px;"><strong>Zurückgegebene Materialien:</strong><br> ${ret.items.map(i => `✅ ${escapeHtml(i.name)}: ${i.returnQuantity} von ${i.totalBorrowed} Stück`).join('<br>')}</div>
                     </div>`;
         });
         historyDiv.innerHTML = html;
     }
 
-    window.generateReturnPDF = async function(returnRecord) {
-        const printDiv = document.createElement('div');
-        printDiv.style.padding = "40px"; printDiv.style.fontFamily = "Arial"; printDiv.style.width = "800px"; printDiv.style.backgroundColor = "white";
-        printDiv.innerHTML = `<h1>Rückgabeprotokoll Material (Historie)</h1><p><strong>Datum:</strong> ${escapeHtml(returnRecord.date)}</p><p><strong>Mitarbeiter:</strong> ${escapeHtml(returnRecord.employee)}</p><h3>Zurückgegebene Materialien:</h3><ul>${returnRecord.items.map(item => `<li>✅ ${escapeHtml(item.name)}: ${item.returnQuantity} von ${item.totalBorrowed} Stück zurückgegeben</li>`).join('')}</ul><p><strong>Unterschrift Mitarbeiter:</strong></p><img src="${returnRecord.signature}" style="border:1px solid #000; max-width:400px;"><p><em>Rückgabe bestätigt.</em></p>`;
-        document.body.appendChild(printDiv);
-        const canvasImg = await html2canvas(printDiv, {scale: 2});
-        const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
-        pdf.addImage(canvasImg.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 210, (canvasImg.height * 210) / canvasImg.width);
-        pdf.save(`Rueckgabe_Historie_${returnRecord.employee}_${returnRecord.timestamp}.pdf`);
-        document.body.removeChild(printDiv);
+    window.downloadReturnPDF = async function(returnRecord) {
+        await generateAndSavePDF(null, true, returnRecord);
     };
 
     function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
