@@ -6,10 +6,10 @@
     <title>Material Verwaltung</title>
 
     <!-- Firebase & PDF Libs -->
-    <script src="https://deu01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fcdnjs.cloudflare.com%2Fajax%2Flibs%2Fjspdf%2F2.5.1%2Fjspdf.umd.min.js&data=05%7C02%7Cjessica.gaedicke%40gw-bauservice.de%7C9747c6b139b545bd985908de9e135861%7C7e6984c1ad8d4792878af51c4db7f2f5%7C0%7C0%7C639122003693048187%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C60000%7C%7C%7C&sdata=GTMsgPMrwghzKJ01G3YuRTfFrWyOcnu9bnWS%2BZFMl38%3D&reserved=0"></script>
-    <script src="https://deu01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fcdnjs.cloudflare.com%2Fajax%2Flibs%2Fhtml2canvas%2F1.4.1%2Fhtml2canvas.min.js&data=05%7C02%7Cjessica.gaedicke%40gw-bauservice.de%7C9747c6b139b545bd985908de9e135861%7C7e6984c1ad8d4792878af51c4db7f2f5%7C0%7C0%7C639122003693073692%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C60000%7C%7C%7C&sdata=xiTIfWqnP36j4D6t%2Febtg7CWK3b7C6SnezAnIjckqhQ%3D&reserved=0"></script>
-    <script src="https://deu01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwww.gstatic.com%2Ffirebasejs%2F8.10.1%2Ffirebase-app.js&data=05%7C02%7Cjessica.gaedicke%40gw-bauservice.de%7C9747c6b139b545bd985908de9e135861%7C7e6984c1ad8d4792878af51c4db7f2f5%7C0%7C0%7C639122003693093156%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C60000%7C%7C%7C&sdata=IS9jBPmMHisqiMNGZ%2FuySIYo4C3DWHc5S30V97qrC%2FQ%3D&reserved=0"></script>
-    <script src="https://deu01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwww.gstatic.com%2Ffirebasejs%2F8.10.1%2Ffirebase-database.js&data=05%7C02%7Cjessica.gaedicke%40gw-bauservice.de%7C9747c6b139b545bd985908de9e135861%7C7e6984c1ad8d4792878af51c4db7f2f5%7C0%7C0%7C639122003693110447%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C60000%7C%7C%7C&sdata=d99ZyChuMeRjJ4S92msDu6Cbe3b%2BGLWJpmJlIkFJxok%3D&reserved=0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
     <style>
         body {
@@ -208,19 +208,24 @@
 </div>
 
 <script>
-    // Firebase Init
-    var firebaseConfig = {
+    // NEUE Firebase Konfiguration mit der korrekten Datenbank-URL
+    const firebaseConfig = {
       apiKey: "AIzaSyAj5D135Fu7cEG2Qh9BB54qfrTo-TUz5nc",
-      authDomain: "material---ausgabe.firebaseapp.com",
-      databaseURL: "https://deu01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fmaterial---ausgabe-default-rtdb.europe-west1.firebasedatabase.app%2F&data=05%7C02%7Cjessica.gaedicke%40gw-bauservice.de%7C9747c6b139b545bd985908de9e135861%7C7e6984c1ad8d4792878af51c4db7f2f5%7C0%7C0%7C639122003693127368%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C60000%7C%7C%7C&sdata=C96nW0o7MvMe347aR%2FTmH58NPGy%2F5kVcyzxJLGnE3DA%3D&reserved=0",
-      projectId: "material---ausgabe",
-      storageBucket: "material---ausgabe.firebasestorage.app",
+      authDomain: "materialausgabe-gw.firebaseapp.com",
+      databaseURL: "https://materialausgabe-gw-default-rtdb.europe-west1.firebasedatabase.app/",
+      projectId: "materialausgabe-gw",
+      storageBucket: "materialausgabe-gw.firebasestorage.app",
       messagingSenderId: "76046257977",
       appId: "1:76046257977:web:5a17562816b60a47fa62e8"
     };
 
-    firebase.initializeApp(firebaseConfig);
-    var db = firebase.database();
+    // Firebase initialisieren (falls noch nicht initialisiert)
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    } else {
+        firebase.app(); // use existing app
+    }
+    const db = firebase.database();
 
     let employees = [], materials = [], issues = [], currentCart = [];
     let canvas, ctx;
@@ -252,27 +257,50 @@
         }
     }
 
-    // --- Datenbank Listener ---
-    db.ref('/').on('value', (snapshot) => {
-        const data = snapshot.val() || {};
-        employees = data.employees || ["Max Mustermann", "Anna Schmidt", "Thomas Berger"];
-        materials = data.materials || ["Akkuschrauber Makita", "Winkelschleifer", "Bohrhammer", "Verlängerungskabel 25m"];
-        issues = Object.values(data.issues || {}).sort((a,b) => b.id - a.id);
-
-        document.getElementById('connectionStatus').style.background = '#34c759';
-        document.getElementById('connectionStatus').innerHTML = '🟢 Live verbunden – Alle Geräte sehen Änderungen sofort';
-
-        renderAll();
+    // --- Datenbank Listener (Live-Sync für employees, materials, issues) ---
+    // Mitarbeiter synchronisieren
+    db.ref('employees').on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data && Array.isArray(data)) {
+            employees = data;
+        } else if (data && typeof data === 'object') {
+            // Falls als Objekt gespeichert, in Array umwandeln (sicherheitshalber)
+            employees = Object.values(data);
+        } else {
+            employees = ["Max Mustermann", "Anna Schmidt", "Thomas Berger"];
+        }
+        renderEmployees();
+        updateReturnDropdown(); // Dropdown für Rückgabe aktualisieren
     });
 
-    function renderAll() {
-        renderEmployees();
+    // Materialien synchronisieren
+    db.ref('materials').on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data && Array.isArray(data)) {
+            materials = data;
+        } else if (data && typeof data === 'object') {
+            materials = Object.values(data);
+        } else {
+            materials = ["Akkuschrauber Makita", "Winkelschleifer", "Bohrhammer", "Verlängerungskabel 25m"];
+        }
         renderMaterials();
-        renderHistory();
-        updateReturnDropdown();
-    }
+    });
 
-    // --- Ausgabe Funktionen ---
+    // Ausgaben synchronisieren (issues als Objekt mit IDs)
+    db.ref('issues').on('value', (snapshot) => {
+        const data = snapshot.val() || {};
+        // issues als Array speichern, sortiert nach ID absteigend
+        issues = Object.values(data).sort((a,b) => (b.id || 0) - (a.id || 0));
+        renderHistory();
+        // Wenn Rückgabe-Bereich gerade offen ist, aktualisiere die Anzeige (falls ein Mitarbeiter ausgewählt ist)
+        const returnSelect = document.getElementById('returnEmployeeSelect');
+        if (returnSelect && returnSelect.value && !document.getElementById('rueckgabeSection').classList.contains('hidden')) {
+            showEmployeeMaterials(); // Aktualisiert die Materialliste des ausgewählten Mitarbeiters
+        }
+        document.getElementById('connectionStatus').style.background = '#34c759';
+        document.getElementById('connectionStatus').innerHTML = '🟢 Live verbunden – Alle Geräte sehen Änderungen sofort';
+    });
+
     function renderEmployees() {
         const list = document.getElementById('employeeList');
         if (!list) return;
@@ -280,7 +308,7 @@
             `<li>${emp} <button class="danger btn-small" onclick="deleteEmployee(${i})">Löschen</button></li>`
         ).join('');
 
-        let opt = '<option value="">-- Bitte wählen --</option>' + employees.map(e => `<option value="${e}">${e}</option>`).join('');
+        let opt = '<option value="">-- Bitte wählen --</option>' + employees.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
         const issuer = document.getElementById('issuerSelect');
         const emp = document.getElementById('employeeSelect');
         if(issuer) issuer.innerHTML = opt;
@@ -291,13 +319,13 @@
         const list = document.getElementById('materialList');
         if (!list) return;
         list.innerHTML = materials.map((mat,i) =>
-            `<li>${mat} <button class="danger btn-small" onclick="deleteMaterial(${i})">Löschen</button></li>`
+            `<li>${escapeHtml(mat)} <button class="danger btn-small" onclick="deleteMaterial(${i})">Löschen</button></li>`
         ).join('');
 
         const avail = document.getElementById('availableMaterials');
         if(avail) {
             avail.innerHTML = materials.map((mat) =>
-                `<li>${mat} <button class="success btn-small" onclick="addToCart('${mat}')">➕ Hinzufügen</button></li>`
+                `<li>${escapeHtml(mat)} <button class="success btn-small" onclick="addToCart('${escapeHtml(mat).replace(/'/g, "\\'")}')">➕ Hinzufügen</button></li>`
             ).join('');
         }
     }
@@ -305,34 +333,66 @@
     function renderHistory() {
         const list = document.getElementById('historyList');
         if (!list) return;
+        if (issues.length === 0) {
+            list.innerHTML = '<li style="text-align:center;color:#888;">Keine Ausgaben vorhanden</li>';
+            return;
+        }
         list.innerHTML = issues.map(issue => `
             <li style="flex-direction:column;align-items:flex-start;">
-                <div style="width:100%;display:flex;justify-content:space-between;">
-                    <strong>${issue.date} — ${issue.employee}</strong>
+                <div style="width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;">
+                    <strong>${escapeHtml(issue.date)} — ${escapeHtml(issue.employee)}</strong>
                     <div>
                         <button class="success btn-small" onclick='generatePDF(${JSON.stringify(issue).replace(/"/g,"&quot;")})'>PDF</button>
                         <button class="danger btn-small" onclick="deleteIssue(${issue.id})">Löschen</button>
                     </div>
                 </div>
-                <small>Herausgeber: ${issue.issuer} | ${issue.items.length} Teile</small>
+                <small>Herausgeber: ${escapeHtml(issue.issuer)} | ${issue.items ? issue.items.length : 0} Teile</small>
             </li>
         `).join('');
     }
 
     function addEmployee() {
         let val = document.getElementById('newEmployee').value.trim();
-        if(val) { employees.push(val); db.ref('employees').set(employees); document.getElementById('newEmployee').value = ''; }
+        if(val) { 
+            employees.push(val); 
+            db.ref('employees').set(employees); 
+            document.getElementById('newEmployee').value = ''; 
+        } else {
+            alert("Bitte einen Namen eingeben");
+        }
     }
-    function deleteEmployee(i) { employees.splice(i,1); db.ref('employees').set(employees); }
+    function deleteEmployee(i) { 
+        if(confirm("Mitarbeiter wirklich löschen?")) {
+            employees.splice(i,1); 
+            db.ref('employees').set(employees); 
+        }
+    }
 
     function addMaterial() {
         let val = document.getElementById('newMaterial').value.trim();
-        if(val) { materials.push(val); db.ref('materials').set(materials); document.getElementById('newMaterial').value = ''; }
+        if(val) { 
+            materials.push(val); 
+            db.ref('materials').set(materials); 
+            document.getElementById('newMaterial').value = ''; 
+        } else {
+            alert("Bitte ein Material eingeben");
+        }
     }
-    function deleteMaterial(i) { materials.splice(i,1); db.ref('materials').set(materials); }
+    function deleteMaterial(i) { 
+        if(confirm("Material wirklich löschen?")) {
+            materials.splice(i,1); 
+            db.ref('materials').set(materials); 
+        }
+    }
 
-    function addToCart(mat) { currentCart.push(mat); renderCart(); }
-    function removeFromCart(i) { currentCart.splice(i,1); renderCart(); }
+    function addToCart(mat) { 
+        currentCart.push(mat); 
+        renderCart(); 
+    }
+    function removeFromCart(i) { 
+        currentCart.splice(i,1); 
+        renderCart(); 
+    }
 
     function renderCart() {
         let div = document.getElementById('selectedMaterials');
@@ -343,7 +403,7 @@
         }
         div.innerHTML = currentCart.map((m,i) => `
             <div class="cart-item">
-                <span>${m}</span>
+                <span>${escapeHtml(m)}</span>
                 <button class="danger btn-small" onclick="removeFromCart(${i})">❌ Entfernen</button>
             </div>
         `).join('');
@@ -367,6 +427,8 @@
         ctx.lineWidth = 3;
         ctx.lineCap = 'round';
         ctx.strokeStyle = '#000';
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
     window.addEventListener('resize', resizeCanvas);
 
@@ -374,21 +436,31 @@
         let rect = canvas.getBoundingClientRect();
         let x = e.touches ? e.touches[0].clientX : e.clientX;
         let y = e.touches ? e.touches[0].clientY : e.clientY;
-        return {x: x-rect.left, y:y-rect.top};
+        return {x: x-rect.left, y: y-rect.top};
     }
 
     function startDrawing(e){e.preventDefault(); isDrawing=true; let p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y);}
     function draw(e){if(!isDrawing)return; e.preventDefault(); let p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke();}
     function stopDrawing(){isDrawing=false;}
 
-    function clearSignature(){ctx.clearRect(0,0,canvas.width,canvas.height);}
-    function isCanvasBlank(){let b=document.createElement('canvas'); b.width=canvas.width; b.height=canvas.height; return canvas.toDataURL()===b.toDataURL();}
+    function clearSignature(){ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);}
+    function isCanvasBlank(){
+        // Prüft ob außer weißem Hintergrund was gezeichnet wurde
+        const blank = document.createElement('canvas');
+        blank.width = canvas.width;
+        blank.height = canvas.height;
+        const blankCtx = blank.getContext('2d');
+        blankCtx.fillStyle = '#fff';
+        blankCtx.fillRect(0, 0, blank.width, blank.height);
+        return canvas.toDataURL() === blank.toDataURL();
+    }
 
     async function saveIssue() {
         let issuer = document.getElementById('issuerSelect').value;
         let emp = document.getElementById('employeeSelect').value;
         if(!issuer || !emp || issuer === emp || currentCart.length === 0 || isCanvasBlank()) {
-            return alert("Bitte alle Felder ausfüllen (Herausgeber, Empfänger, Material und Unterschrift)!");
+            alert("Bitte alle Felder ausfüllen (Herausgeber, Empfänger, Material und Unterschrift) und Herausgeber ≠ Empfänger!");
+            return;
         }
 
         let issueId = Date.now();
@@ -414,13 +486,14 @@
     async function generatePDF(issue) {
         const printDiv = document.createElement('div');
         printDiv.style.padding = "40px"; printDiv.style.fontFamily = "Arial"; printDiv.style.width = "800px";
+        printDiv.style.backgroundColor = "white";
         printDiv.innerHTML = `
             <h1>Übergabeprotokoll Material</h1>
-            <p><strong>Datum:</strong> ${issue.date}</p>
-            <p><strong>Herausgeber:</strong> ${issue.issuer}</p>
-            <p><strong>Empfänger:</strong> ${issue.employee}</p>
+            <p><strong>Datum:</strong> ${escapeHtml(issue.date)}</p>
+            <p><strong>Herausgeber:</strong> ${escapeHtml(issue.issuer)}</p>
+            <p><strong>Empfänger:</strong> ${escapeHtml(issue.employee)}</p>
             <h3>Übergebene Materialien:</h3>
-            <ul>${issue.items.map(item => `<li>☑ ${item}</li>`).join('')}</ul>
+            <ul>${issue.items.map(item => `<li>☑ ${escapeHtml(item)}</li>`).join('')}</ul>
             <p><strong>Unterschrift Empfänger:</strong></p>
             <img src="${issue.signature}" style="border:1px solid #000; max-width:400px;">
         `;
@@ -441,7 +514,7 @@
         const select = document.getElementById('returnEmployeeSelect');
         if (!select) return;
         select.innerHTML = '<option value="">-- Bitte Mitarbeiter wählen --</option>' +
-            employees.map(e => `<option value="${e}">${e}</option>`).join('');
+            employees.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
     }
 
     function showEmployeeMaterials() {
@@ -454,32 +527,33 @@
             return;
         }
 
-        // Alle Ausgaben dieses Mitarbeiters finden (nur aktuelle, keine Historie löschen)
+        // Alle Ausgaben dieses Mitarbeiters
         const employeeIssues = issues.filter(issue => issue.employee === employeeName);
 
         if (employeeIssues.length === 0) {
-            displayDiv.innerHTML = `<p style="color:#888; text-align:center;">${employeeName} hat aktuell keine Materialien ausgeliehen.</p>`;
+            displayDiv.innerHTML = `<p style="color:#888; text-align:center;">${escapeHtml(employeeName)} hat aktuell keine Materialien ausgeliehen.</p>`;
             return;
         }
 
         // Alle Materialien aus allen Issues des Mitarbeiters sammeln
         let allItems = [];
         employeeIssues.forEach(issue => {
-            allItems = allItems.concat(issue.items);
+            if (issue.items) allItems = allItems.concat(issue.items);
         });
 
-        // Duplikate entfernen, falls gewünscht, hier zeigen wir einfach alles an
-        // Besser: Gruppieren und zählen
+        // Gruppieren und zählen
         let itemCounts = {};
         allItems.forEach(item => { itemCounts[item] = (itemCounts[item] || 0) + 1; });
 
-        let html = `<h3>📋 Materialien von ${employeeName}:</h3><ul>`;
+        let html = `<h3>📋 Materialien von ${escapeHtml(employeeName)}:</h3><ul>`;
         for (let [item, count] of Object.entries(itemCounts)) {
-            html += `<li style="justify-content:space-between;"><span>${item} ${count > 1 ? `(${count}x)` : ''}</span>
-                     <button class="success btn-small" onclick="returnSingleItem('${employeeName}', '${item}')">✅ Zurückgeben</button></li>`;
+            html += `<li style="justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                        <span>${escapeHtml(item)} ${count > 1 ? `(${count}x)` : ''}</span>
+                        <button class="success btn-small" onclick="returnSingleItem('${escapeHtml(employeeName).replace(/'/g, "\\'")}', '${escapeHtml(item).replace(/'/g, "\\'")}')">✅ Zurückgeben</button>
+                     </li>`;
         }
         html += '</ul>';
-        html += `<button class="danger" style="margin-top:15px;" onclick="returnAllItems('${employeeName}')">🔄 ALLE Materialien von ${employeeName} zurückgeben</button>`;
+        html += `<button class="danger" style="margin-top:15px; width:100%;" onclick="returnAllItems('${escapeHtml(employeeName).replace(/'/g, "\\'")}')">🔄 ALLE Materialien von ${escapeHtml(employeeName)} zurückgeben</button>`;
 
         displayDiv.innerHTML = html;
     }
@@ -490,43 +564,62 @@
         // Finde den ersten Issue, der dieses Item enthält
         let issueToModify = null;
         for (let issue of issues) {
-            if (issue.employee === employeeName && issue.items.includes(itemName)) {
+            if (issue.employee === employeeName && issue.items && issue.items.includes(itemName)) {
                 issueToModify = issue;
                 break;
             }
         }
 
         if (issueToModify) {
-            // Item aus dem Array entfernen
             const index = issueToModify.items.indexOf(itemName);
             if (index > -1) issueToModify.items.splice(index, 1);
 
             if (issueToModify.items.length === 0) {
-                // Wenn keine Items mehr übrig, Issue löschen
                 db.ref('issues/' + issueToModify.id).remove();
             } else {
-                // Sonst aktualisieren
                 db.ref('issues/' + issueToModify.id).set(issueToModify);
             }
             alert(`${itemName} wurde zurückgegeben.`);
+        } else {
+            alert("Material nicht gefunden.");
         }
-        // Aktualisierung erfolgt automatisch über Firebase Listener
     };
 
     window.returnAllItems = function(employeeName) {
         if (!confirm(`ALLE Materialien von ${employeeName} zurückgeben?`)) return;
 
-        // Alle Issues des Mitarbeiters löschen
         issues.filter(i => i.employee === employeeName).forEach(issue => {
             db.ref('issues/' + issue.id).remove();
         });
         alert(`Alle Materialien von ${employeeName} wurden zurückgegeben.`);
     };
 
-    // Initialisierung nach Firebase Load verzögert
+    // Hilfsfunktion zum Escapen von HTML
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        }).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, function(c) {
+            return c;
+        });
+    }
+
+    // Initialisierung: Canvas vorbereiten und Start im Hauptmenü
     setTimeout(() => {
-        // Start im Hauptmenü
         showSection('main');
+        // Canvas initialisieren, falls schon sichtbar (wird erst bei Ausgabe benötigt)
+        if (!canvas) {
+            canvas = document.getElementById('signaturePad');
+            if (canvas) {
+                ctx = canvas.getContext('2d');
+                initCanvasEvents();
+                resizeCanvas();
+                clearSignature();
+            }
+        }
     }, 500);
 </script>
 </body>
