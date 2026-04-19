@@ -74,7 +74,6 @@
         .material-section { display: flex; flex-direction: column; gap: 25px; }
         .section-box { border: 1px solid #ddd; border-radius: 10px; padding: 15px; background: #fafafa; }
         .cart-box { border: 2px solid #34c759; background: #f0fdf4; }
-        .returned-box { border: 2px solid #ff9500; background: #fff7e6; }
 
         .cart-item {
             display: flex;
@@ -138,19 +137,67 @@
             flex-wrap: wrap;
             justify-content: space-between;
         }
-        .pdf-thumb {
-            font-size: 12px;
-            background: #007aff;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 6px;
-            text-decoration: none;
+        
+        /* Modal für PDF-Anzeige */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            overflow: auto;
         }
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 20px;
+            width: 90%;
+            max-width: 900px;
+            border-radius: 12px;
+            position: relative;
+        }
+        .close-modal {
+            position: absolute;
+            right: 20px;
+            top: 10px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #333;
+        }
+        .close-modal:hover { color: red; }
+        .pdf-iframe {
+            width: 100%;
+            height: 80vh;
+            border: none;
+        }
+        .pdf-btn {
+            background-color: #007aff;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            border: none;
+            margin-left: 10px;
+        }
+        .pdf-btn:hover { background-color: #0056b3; }
     </style>
 </head>
 <body>
 
 <div id="connectionStatus">⏳ Verbinde zur Cloud...</div>
+
+<!-- Modal für PDF-Anzeige -->
+<div id="pdfModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closePDFModal()">&times;</span>
+        <iframe id="pdfIframe" class="pdf-iframe"></iframe>
+    </div>
+</div>
 
 <!-- HAUPTMENÜ -->
 <div id="mainMenu">
@@ -219,7 +266,7 @@
     </div>
 </div>
 
-<!-- RÜCKGABE MIT MENGENAUSWAHL UND PDF IN HISTORIE -->
+<!-- RÜCKGABE MIT PDF-SPEICHERUNG UND DIREKTER ANZEIGE -->
 <div id="rueckgabeSection" class="hidden">
     <button class="back-btn btn-small" onclick="showSection('main')">⬅️ Zurück zum Menü</button>
     <h1>📥 Material Rückgabe</h1>
@@ -236,7 +283,7 @@
             <p style="color:#888; text-align:center;">Wählen Sie einen Mitarbeiter aus, um seine aktuell ausgeliehenen Materialien zu sehen.</p>
         </div>
 
-        <!-- Bereich: Historie der bereits zurückgegebenen Materialien (mit PDF-Links) -->
+        <!-- Bereich: Historie der bereits zurückgegebenen Materialien (mit PDF-Button zum direkten Öffnen) -->
         <div id="returnHistoryDisplay" class="card" style="margin-top:20px; background:#fff7e6;">
             <h3>📜 Rückgabe-Historie (bereits zurückgegebene Materialien)</h3>
             <div id="returnHistoryList">
@@ -301,6 +348,24 @@
         }
     }
 
+    // --- Modal PDF Funktionen ---
+    function openPDFModal(pdfDataUrl) {
+        const modal = document.getElementById('pdfModal');
+        const iframe = document.getElementById('pdfIframe');
+        iframe.src = pdfDataUrl;
+        modal.style.display = 'block';
+    }
+    function closePDFModal() {
+        const modal = document.getElementById('pdfModal');
+        const iframe = document.getElementById('pdfIframe');
+        iframe.src = '';
+        modal.style.display = 'none';
+    }
+    window.onclick = function(event) {
+        const modal = document.getElementById('pdfModal');
+        if (event.target === modal) closePDFModal();
+    };
+
     // --- Datenbank Listener ---
     db.ref('employees').on('value', (snapshot) => {
         const data = snapshot.val();
@@ -361,14 +426,15 @@
         const list = document.getElementById('historyList');
         if (!list) return;
         if (issues.length === 0) { list.innerHTML = '<li style="text-align:center;color:#888;">Keine Ausgaben vorhanden</li>'; return; }
-        list.innerHTML = issues.map(issue => `<li style="flex-direction:column;align-items:flex-start;"><div style="width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;"><strong>${escapeHtml(issue.date)} — ${escapeHtml(issue.employee)}</strong><div><button class="success btn-small" onclick='downloadIssuePDF(${JSON.stringify(issue).replace(/"/g,"&quot;")})'>PDF</button><button class="danger btn-small" onclick="deleteIssue(${issue.id})">Löschen</button></div></div><small>Herausgeber: ${escapeHtml(issue.issuer)} | ${issue.items ? issue.items.length : 0} Teile</small></li>`).join('');
+        list.innerHTML = issues.map(issue => `<li style="flex-direction:column;align-items:flex-start;"><div style="width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;"><strong>${escapeHtml(issue.date)} — ${escapeHtml(issue.employee)}</strong><div><button class="success btn-small" onclick='openIssuePDF(${JSON.stringify(issue).replace(/"/g,"&quot;")})'>📄 PDF anzeigen</button><button class="danger btn-small" onclick="deleteIssue(${issue.id})">Löschen</button></div></div><small>Herausgeber: ${escapeHtml(issue.issuer)} | ${issue.items ? issue.items.length : 0} Teile</small></li>`).join('');
     }
 
-    async function downloadIssuePDF(issue) {
-        await generateAndSavePDF(issue, false);
+    async function openIssuePDF(issue) {
+        const pdfDataUrl = await generatePDFDataUrl(issue, false);
+        openPDFModal(pdfDataUrl);
     }
 
-    async function generateAndSavePDF(issue, isReturn = false, returnInfo = null) {
+    async function generatePDFDataUrl(issue, isReturn = false, returnInfo = null) {
         const printDiv = document.createElement('div');
         printDiv.style.padding = "40px"; printDiv.style.fontFamily = "Arial"; printDiv.style.width = "800px"; printDiv.style.backgroundColor = "white";
         if (!isReturn) {
@@ -380,10 +446,21 @@
         const canvasImg = await html2canvas(printDiv, {scale: 2});
         const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
         pdf.addImage(canvasImg.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 210, (canvasImg.height * 210) / canvasImg.width);
-        const filename = isReturn ? `Rueckgabe_${returnInfo.employee}_${returnInfo.timestamp}.pdf` : `Material_${issue.employee}_${issue.id}.pdf`;
-        pdf.save(filename);
+        const pdfDataUrl = pdf.output('dataurlstring');
         document.body.removeChild(printDiv);
-        return pdf;
+        return pdfDataUrl;
+    }
+
+    async function generateAndSavePDF(issue, isReturn = false, returnInfo = null) {
+        const pdfDataUrl = await generatePDFDataUrl(issue, isReturn, returnInfo);
+        if (!isReturn) {
+            // Bei Ausgabe zusätzlich herunterladen
+            const link = document.createElement('a');
+            link.download = `Material_${issue.employee}_${issue.id}.pdf`;
+            link.href = pdfDataUrl;
+            link.click();
+        }
+        return pdfDataUrl;
     }
 
     function addEmployee() { let val = document.getElementById('newEmployee').value.trim(); if(val) { employees.push(val); db.ref('employees').set(employees); document.getElementById('newEmployee').value = ''; } else alert("Bitte einen Namen eingeben"); }
@@ -603,10 +680,10 @@
             signature: signatureData
         };
         
-        // PDF generieren und als DataURL im Record speichern
-        const pdfBlob = await generateAndSavePDF(null, true, returnRecord);
-        // PDF als Base64 für spätere Ansicht speichern (optional)
-        // Wir speichern den gesamten Record in Firebase
+        // PDF generieren und als DataURL speichern
+        const pdfDataUrl = await generatePDFDataUrl(null, true, returnRecord);
+        returnRecord.pdfDataUrl = pdfDataUrl;
+        
         await db.ref('returnHistory/' + timestamp).set(returnRecord);
 
         // UI zurücksetzen
@@ -614,7 +691,7 @@
         clearReturnSignature();
         currentReturnSelections = [];
         showEmployeeFullOverview();
-        alert("Rückgabe erfolgreich! Die PDF wurde heruntergeladen und in der Historie gespeichert.");
+        alert("Rückgabe erfolgreich! Die PDF wurde gespeichert.");
     };
 
     function displayReturnHistoryForEmployee(employeeName) {
@@ -629,7 +706,7 @@
             html += `<div class="history-return-item">
                         <div style="display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center;">
                             <strong>📅 ${escapeHtml(ret.date)}</strong>
-                            <button class="success btn-small" onclick='downloadReturnPDF(${JSON.stringify(ret).replace(/"/g,"&quot;")})'>📄 PDF anzeigen</button>
+                            <button class="pdf-btn" onclick='openReturnPDF(${JSON.stringify(ret).replace(/"/g,"&quot;")})'>📄 PDF anzeigen</button>
                         </div>
                         <div style="margin-top:8px;"><strong>Zurückgegebene Materialien:</strong><br> ${ret.items.map(i => `✅ ${escapeHtml(i.name)}: ${i.returnQuantity} von ${i.totalBorrowed} Stück`).join('<br>')}</div>
                     </div>`;
@@ -637,8 +714,12 @@
         historyDiv.innerHTML = html;
     }
 
-    window.downloadReturnPDF = async function(returnRecord) {
-        await generateAndSavePDF(null, true, returnRecord);
+    window.openReturnPDF = function(returnRecord) {
+        if (returnRecord.pdfDataUrl) {
+            openPDFModal(returnRecord.pdfDataUrl);
+        } else {
+            alert("PDF nicht verfügbar");
+        }
     };
 
     function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
