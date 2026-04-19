@@ -123,6 +123,19 @@
             border-left: 4px solid #ff9500;
             margin-bottom: 10px;
         }
+        .quantity-input {
+            width: 70px !important;
+            text-align: center;
+            margin: 0 10px;
+            padding: 8px;
+        }
+        .return-item-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: space-between;
+        }
     </style>
 </head>
 <body>
@@ -196,7 +209,7 @@
     </div>
 </div>
 
-<!-- RÜCKGABE MIT HISTORIE -->
+<!-- RÜCKGABE MIT MENGENAUSWAHL -->
 <div id="rueckgabeSection" class="hidden">
     <button class="back-btn btn-small" onclick="showSection('main')">⬅️ Zurück zum Menü</button>
     <h1>📥 Material Rückgabe</h1>
@@ -208,12 +221,12 @@
         </select>
         <button class="success" onclick="showEmployeeFullOverview()" style="width:100%;">🔍 Übersicht anzeigen</button>
 
-        <!-- Bereich: Aktuell ausgeliehene Materialien -->
+        <!-- Bereich: Aktuell ausgeliehene Materialien mit Mengenauswahl -->
         <div id="activeMaterialsDisplay" class="employee-material-list" style="margin-top:20px;">
             <p style="color:#888; text-align:center;">Wählen Sie einen Mitarbeiter aus, um seine aktuell ausgeliehenen Materialien zu sehen.</p>
         </div>
 
-        <!-- Bereich: Historie der bereits zurückgegebenen Materialien (wie bei Ausgabe) -->
+        <!-- Bereich: Historie der bereits zurückgegebenen Materialien -->
         <div id="returnHistoryDisplay" class="card" style="margin-top:20px; background:#fff7e6;">
             <h3>📜 Rückgabe-Historie (bereits zurückgegebene Materialien)</h3>
             <div id="returnHistoryList">
@@ -248,13 +261,13 @@
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    let employees = [], materials = [], issues = [], returnHistory = []; // returnHistory speichert alle Rückgabe-Einträge
+    let employees = [], materials = [], issues = [], returnHistory = [];
     let currentCart = [];
     let canvas, ctx;
     let returnCanvas, returnCtx;
     let isDrawing = false, isReturnDrawing = false;
     let currentReturnEmployee = null;
-    let currentReturnItems = [];
+    let currentReturnSelections = []; // { name, totalBorrowed, returnQuantity, issueIds }
 
     // --- UI Navigation ---
     function showSection(section) {
@@ -274,7 +287,7 @@
             updateReturnDropdown();
             document.getElementById('returnSignatureArea').classList.add('hidden');
             currentReturnEmployee = null;
-            currentReturnItems = [];
+            currentReturnSelections = [];
         }
     }
 
@@ -303,7 +316,6 @@
         document.getElementById('connectionStatus').innerHTML = '🟢 Live verbunden – Alle Geräte sehen Änderungen sofort';
     });
 
-    // Rückgabe-Historie aus Firebase laden (separater Pfad: returnHistory)
     db.ref('returnHistory').on('value', (snapshot) => {
         const data = snapshot.val() || {};
         returnHistory = Object.values(data).sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0));
@@ -391,7 +403,8 @@
         if (!isReturn) {
             printDiv.innerHTML = `<h1>Übergabeprotokoll Material</h1><p><strong>Datum:</strong> ${escapeHtml(issue.date)}</p><p><strong>Herausgeber:</strong> ${escapeHtml(issue.issuer)}</p><p><strong>Empfänger:</strong> ${escapeHtml(issue.employee)}</p><h3>Übergebene Materialien:</h3><ul>${issue.items.map(item => `<li>☑ ${escapeHtml(item)}</li>`).join('')}</ul><p><strong>Unterschrift Empfänger:</strong></p><img src="${issue.signature}" style="border:1px solid #000; max-width:400px;">`;
         } else {
-            printDiv.innerHTML = `<h1>Rückgabeprotokoll Material</h1><p><strong>Datum:</strong> ${escapeHtml(returnInfo.date)}</p><p><strong>Mitarbeiter:</strong> ${escapeHtml(returnInfo.employee)}</p><h3>Zurückgegebene Materialien:</h3><ul>${returnInfo.items.map(item => `<li>✅ ${escapeHtml(item.name)} ${item.count > 1 ? `(${item.count}x)` : ''}</li>`).join('')}</ul><p><strong>Unterschrift Mitarbeiter (Rückgabe bestätigt):</strong></p><img src="${returnInfo.signature}" style="border:1px solid #000; max-width:400px;"><p><em>Die Rückgabe wurde durch den Mitarbeiter unterschrieben und ist somit gültig.</em></p>`;
+            // Zeige alle zurückgegebenen Materialien mit Stückzahlen an
+            printDiv.innerHTML = `<h1>Rückgabeprotokoll Material</h1><p><strong>Datum:</strong> ${escapeHtml(returnInfo.date)}</p><p><strong>Mitarbeiter:</strong> ${escapeHtml(returnInfo.employee)}</p><h3>Zurückgegebene Materialien:</h3><ul>${returnInfo.items.map(item => `<li>✅ ${escapeHtml(item.name)}: ${item.returnQuantity} von ${item.totalBorrowed} Stück zurückgegeben</li>`).join('')}</ul><p><strong>Unterschrift Mitarbeiter (Rückgabe bestätigt):</strong></p><img src="${returnInfo.signature}" style="border:1px solid #000; max-width:400px;"><p><em>Die Rückgabe wurde durch den Mitarbeiter unterschrieben und ist somit gültig.</em></p>`;
         }
         document.body.appendChild(printDiv);
         const canvasImg = await html2canvas(printDiv, {scale: 2});
@@ -403,7 +416,7 @@
 
     function deleteIssue(id) { if(confirm("Ausgabe wirklich löschen?")) db.ref('issues/'+id).remove(); }
 
-    // --- Rückgabe mit Historie ---
+    // --- Rückgabe mit Mengenauswahl ---
     function updateReturnDropdown() {
         const select = document.getElementById('returnEmployeeSelect');
         if (select) select.innerHTML = '<option value="">-- Bitte Mitarbeiter wählen --</option>' + employees.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
@@ -415,28 +428,180 @@
         if (!employeeName) { alert("Bitte Mitarbeiter auswählen"); return; }
         currentReturnEmployee = employeeName;
 
-        // Aktive Materialien anzeigen
+        // Aktive Materialien mit Gesamtanzahl ermitteln
         const employeeIssues = issues.filter(issue => issue.employee === employeeName);
         const activeDiv = document.getElementById('activeMaterialsDisplay');
+        
         if (employeeIssues.length === 0) {
             activeDiv.innerHTML = `<p style="color:#888; text-align:center;">${escapeHtml(employeeName)} hat aktuell keine ausgeliehenen Materialien.</p>`;
         } else {
-            let itemMap = new Map();
-            employeeIssues.forEach(issue => { if(issue.items) issue.items.forEach(item => { itemMap.set(item, (itemMap.get(item)||0)+1); }); });
-            let html = `<h3>📋 Aktuell ausgeliehen (${escapeHtml(employeeName)}):</h3><ul>`;
-            for (let [item, count] of itemMap.entries()) {
-                html += `<li style="justify-content:space-between;"><span>${escapeHtml(item)} ${count > 1 ? `(${count}x)` : ''}</span>
-                         <button class="success btn-small" onclick="prepareReturnForItem('${escapeHtml(employeeName).replace(/'/g, "\\'")}', '${escapeHtml(item).replace(/'/g, "\\'")}', ${count})">✅ Zurückgeben</button></li>`;
+            let itemMap = new Map(); // name -> { total, issueIds: [] }
+            employeeIssues.forEach(issue => {
+                if (issue.items) {
+                    issue.items.forEach(item => {
+                        if (!itemMap.has(item)) itemMap.set(item, { total: 0, issueIds: [] });
+                        let entry = itemMap.get(item);
+                        entry.total++;
+                        entry.issueIds.push(issue.id);
+                    });
+                }
+            });
+            
+            let html = `<h3>📋 Aktuell ausgeliehen (${escapeHtml(employeeName)}):</h3>`;
+            html += `<p style="font-size:14px; color:#666;">Bitte geben Sie für jedes Material die zurückzugebende Anzahl ein:</p>`;
+            html += `<div id="returnQuantitiesContainer">`;
+            for (let [item, data] of itemMap.entries()) {
+                html += `<div class="return-item-row" style="display:flex; align-items:center; justify-content:space-between; padding:10px; border-bottom:1px solid #ddd;">
+                            <span style="flex:2;"><strong>${escapeHtml(item)}</strong> (ausgeliehen: ${data.total}x)</span>
+                            <div style="flex:1; display:flex; align-items:center; gap:8px;">
+                                <label>Zurück:</label>
+                                <input type="number" id="qty_${escapeHtml(item).replace(/\s/g, '_')}" min="0" max="${data.total}" value="${data.total}" style="width:80px; padding:8px; text-align:center;" class="quantity-input">
+                                <span>x</span>
+                            </div>
+                        </div>`;
             }
-            html += `<li><button class="secondary" style="width:100%;" onclick="prepareReturnAllItems('${escapeHtml(employeeName).replace(/'/g, "\\'")}')">🔄 ALLE Materialien zurückgeben</button></li></ul>`;
+            html += `<button class="secondary" style="margin-top:20px; width:100%;" onclick="prepareReturnWithQuantities()">🔄 Ausgewählte Mengen zurückgeben</button>`;
+            html += `</div>`;
             activeDiv.innerHTML = html;
         }
 
-        // Rückgabe-Historie anzeigen
         displayReturnHistoryForEmployee(employeeName);
         document.getElementById('returnSignatureArea').classList.add('hidden');
-        currentReturnItems = [];
+        currentReturnSelections = [];
     }
+
+    window.prepareReturnWithQuantities = function() {
+        const employeeIssues = issues.filter(issue => issue.employee === currentReturnEmployee);
+        let itemMap = new Map();
+        employeeIssues.forEach(issue => {
+            if (issue.items) {
+                issue.items.forEach(item => {
+                    if (!itemMap.has(item)) itemMap.set(item, { total: 0, issueIds: [] });
+                    let entry = itemMap.get(item);
+                    entry.total++;
+                    entry.issueIds.push(issue.id);
+                });
+            }
+        });
+        
+        currentReturnSelections = [];
+        for (let [item, data] of itemMap.entries()) {
+            const inputId = `qty_${item.replace(/\s/g, '_')}`;
+            const input = document.getElementById(inputId);
+            let returnQty = 0;
+            if (input) {
+                returnQty = parseInt(input.value) || 0;
+                if (returnQty < 0) returnQty = 0;
+                if (returnQty > data.total) returnQty = data.total;
+            }
+            if (returnQty > 0) {
+                currentReturnSelections.push({
+                    name: item,
+                    totalBorrowed: data.total,
+                    returnQuantity: returnQty,
+                    issueIds: data.issueIds
+                });
+            }
+        }
+        
+        if (currentReturnSelections.length === 0) {
+            alert("Bitte mindestens ein Material mit einer Menge größer 0 auswählen.");
+            return;
+        }
+        
+        // Bestätigungsmeldung anzeigen
+        let summary = "Folgende Rückgaben werden erfasst:\n";
+        currentReturnSelections.forEach(sel => {
+            summary += `- ${sel.name}: ${sel.returnQuantity} von ${sel.totalBorrowed} Stück\n`;
+        });
+        if (confirm(summary + "\nMöchten Sie fortfahren?")) {
+            showReturnSignaturePanel(currentReturnEmployee, currentReturnSelections);
+        }
+    };
+
+    function showReturnSignaturePanel(employeeName, selections) {
+        const signatureArea = document.getElementById('returnSignatureArea');
+        signatureArea.classList.remove('hidden');
+        if (!returnCanvas) {
+            returnCanvas = document.getElementById('returnSignaturePad');
+            returnCtx = returnCanvas.getContext('2d');
+            initCanvasEvents(returnCanvas, returnCtx, 'return');
+            resizeCanvas(returnCanvas, returnCtx);
+        } else { resizeCanvas(returnCanvas, returnCtx); }
+        clearReturnSignature();
+        
+        const activeDiv = document.getElementById('activeMaterialsDisplay');
+        let summaryHtml = `<div style="margin-top:15px; padding:10px; background:#e9ecef; border-radius:8px;">
+                            <strong>⏳ Rückgabe vorbereitet:</strong><br>`;
+        selections.forEach(sel => {
+            summaryHtml += `📦 ${escapeHtml(sel.name)}: ${sel.returnQuantity} von ${sel.totalBorrowed} Stück<br>`;
+        });
+        summaryHtml += `<em>Bitte unten unterschreiben und bestätigen.</em></div>`;
+        activeDiv.innerHTML += summaryHtml;
+    }
+
+    window.confirmReturnWithSignature = async function() {
+        if (!returnCanvas || isCanvasBlank(returnCanvas, returnCtx)) { alert("Bitte unterschreiben Sie die Rückgabe!"); return; }
+        if (!currentReturnEmployee || currentReturnSelections.length === 0) { alert("Keine Rückgabe-Artikel ausgewählt."); return; }
+
+        const signatureData = returnCanvas.toDataURL();
+        const returnDate = new Date().toLocaleDateString('de-DE') + " " + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+        const timestamp = Date.now();
+
+        // Für jede Auswahl die entsprechenden Items aus den Issues entfernen
+        for (let sel of currentReturnSelections) {
+            let remainingToRemove = sel.returnQuantity;
+            // Gehe durch alle Issue-IDs und entferne Items, bis die gewünschte Menge erreicht ist
+            for (let issueId of sel.issueIds) {
+                if (remainingToRemove <= 0) break;
+                const issueRef = db.ref('issues/' + issueId);
+                const snapshot = await issueRef.once('value');
+                const issue = snapshot.val();
+                if (issue && issue.items) {
+                    let newItems = [...issue.items];
+                    let removed = 0;
+                    for (let i = 0; i < newItems.length && removed < remainingToRemove; i++) {
+                        if (newItems[i] === sel.name) {
+                            newItems.splice(i, 1);
+                            removed++;
+                            i--; // adjust index after splice
+                        }
+                    }
+                    remainingToRemove -= removed;
+                    if (newItems.length === 0) {
+                        await issueRef.remove();
+                    } else {
+                        await issueRef.update({ items: newItems });
+                    }
+                }
+            }
+        }
+
+        // Rückgabe-Eintrag speichern (nur die tatsächlich zurückgegebenen Mengen)
+        const returnRecord = {
+            id: timestamp,
+            timestamp: timestamp,
+            employee: currentReturnEmployee,
+            date: returnDate,
+            items: currentReturnSelections.map(sel => ({ 
+                name: sel.name, 
+                totalBorrowed: sel.totalBorrowed,
+                returnQuantity: sel.returnQuantity 
+            })),
+            signature: signatureData
+        };
+        await db.ref('returnHistory/' + timestamp).set(returnRecord);
+
+        // PDF generieren
+        await generatePDF(null, true, returnRecord);
+
+        // UI zurücksetzen
+        document.getElementById('returnSignatureArea').classList.add('hidden');
+        clearReturnSignature();
+        currentReturnSelections = [];
+        showEmployeeFullOverview(); // Aktualisiert die Ansicht
+        alert("Rückgabe erfolgreich! Die PDF wurde heruntergeladen.");
+    };
 
     function displayReturnHistoryForEmployee(employeeName) {
         const historyDiv = document.getElementById('returnHistoryList');
@@ -452,7 +617,7 @@
                             <strong>📅 ${escapeHtml(ret.date)}</strong>
                             <button class="success btn-small" onclick='generateReturnPDF(${JSON.stringify(ret).replace(/"/g,"&quot;")})'>PDF</button>
                         </div>
-                        <div><strong>Zurückgegebene Materialien:</strong> ${ret.items.map(i => `${escapeHtml(i.name)} (${i.count}x)`).join(', ')}</div>
+                        <div><strong>Zurückgegebene Materialien:</strong> ${ret.items.map(i => `${escapeHtml(i.name)}: ${i.returnQuantity} von ${i.totalBorrowed} Stück`).join(', ')}</div>
                     </div>`;
         });
         historyDiv.innerHTML = html;
@@ -461,110 +626,13 @@
     window.generateReturnPDF = async function(returnRecord) {
         const printDiv = document.createElement('div');
         printDiv.style.padding = "40px"; printDiv.style.fontFamily = "Arial"; printDiv.style.width = "800px"; printDiv.style.backgroundColor = "white";
-        printDiv.innerHTML = `<h1>Rückgabeprotokoll Material (Historie)</h1><p><strong>Datum:</strong> ${escapeHtml(returnRecord.date)}</p><p><strong>Mitarbeiter:</strong> ${escapeHtml(returnRecord.employee)}</p><h3>Zurückgegebene Materialien:</h3><ul>${returnRecord.items.map(item => `<li>✅ ${escapeHtml(item.name)} ${item.count > 1 ? `(${item.count}x)` : ''}</li>`).join('')}</ul><p><strong>Unterschrift Mitarbeiter:</strong></p><img src="${returnRecord.signature}" style="border:1px solid #000; max-width:400px;"><p><em>Rückgabe bestätigt.</em></p>`;
+        printDiv.innerHTML = `<h1>Rückgabeprotokoll Material (Historie)</h1><p><strong>Datum:</strong> ${escapeHtml(returnRecord.date)}</p><p><strong>Mitarbeiter:</strong> ${escapeHtml(returnRecord.employee)}</p><h3>Zurückgegebene Materialien:</h3><ul>${returnRecord.items.map(item => `<li>✅ ${escapeHtml(item.name)}: ${item.returnQuantity} von ${item.totalBorrowed} Stück zurückgegeben</li>`).join('')}</ul><p><strong>Unterschrift Mitarbeiter:</strong></p><img src="${returnRecord.signature}" style="border:1px solid #000; max-width:400px;"><p><em>Rückgabe bestätigt.</em></p>`;
         document.body.appendChild(printDiv);
         const canvasImg = await html2canvas(printDiv, {scale: 2});
         const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
         pdf.addImage(canvasImg.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 210, (canvasImg.height * 210) / canvasImg.width);
         pdf.save(`Rueckgabe_Historie_${returnRecord.employee}_${returnRecord.timestamp}.pdf`);
         document.body.removeChild(printDiv);
-    };
-
-    window.prepareReturnForItem = function(employeeName, itemName, count) {
-        // Finde alle Issue-IDs, die dieses Item enthalten
-        const employeeIssues = issues.filter(issue => issue.employee === employeeName);
-        let issueIds = [];
-        for (let issue of employeeIssues) {
-            if (issue.items && issue.items.includes(itemName)) {
-                for (let i = 0; i < count; i++) issueIds.push(issue.id);
-            }
-        }
-        currentReturnItems = [{ name: itemName, count: count, issueIds: issueIds.slice(0, count) }];
-        showReturnSignaturePanel(employeeName, currentReturnItems);
-    };
-
-    window.prepareReturnAllItems = function(employeeName) {
-        const employeeIssues = issues.filter(issue => issue.employee === employeeName);
-        let itemMap = new Map();
-        employeeIssues.forEach(issue => {
-            if (issue.items) {
-                issue.items.forEach(item => {
-                    if (!itemMap.has(item)) itemMap.set(item, {count: 0, issueIds: []});
-                    let entry = itemMap.get(item);
-                    entry.count++;
-                    entry.issueIds.push(issue.id);
-                });
-            }
-        });
-        currentReturnItems = [];
-        for (let [name, data] of itemMap.entries()) {
-            currentReturnItems.push({ name: name, count: data.count, issueIds: data.issueIds });
-        }
-        if (currentReturnItems.length === 0) { alert("Keine Materialien zum Zurückgeben."); return; }
-        showReturnSignaturePanel(employeeName, currentReturnItems);
-    };
-
-    function showReturnSignaturePanel(employeeName, items) {
-        const signatureArea = document.getElementById('returnSignatureArea');
-        signatureArea.classList.remove('hidden');
-        if (!returnCanvas) {
-            returnCanvas = document.getElementById('returnSignaturePad');
-            returnCtx = returnCanvas.getContext('2d');
-            initCanvasEvents(returnCanvas, returnCtx, 'return');
-            resizeCanvas(returnCanvas, returnCtx);
-        } else { resizeCanvas(returnCanvas, returnCtx); }
-        clearReturnSignature();
-        const activeDiv = document.getElementById('activeMaterialsDisplay');
-        const itemList = items.map(i => `${i.name} (${i.count}x)`).join(', ');
-        activeDiv.innerHTML += `<div style="margin-top:15px; padding:10px; background:#e9ecef; border-radius:8px;"><strong>⏳ Rückgabe vorbereitet:</strong> ${escapeHtml(itemList)}<br><em>Bitte unten unterschreiben und bestätigen.</em></div>`;
-    }
-
-    window.confirmReturnWithSignature = async function() {
-        if (!returnCanvas || isCanvasBlank(returnCanvas, returnCtx)) { alert("Bitte unterschreiben Sie die Rückgabe!"); return; }
-        if (!currentReturnEmployee || currentReturnItems.length === 0) { alert("Keine Rückgabe-Artikel ausgewählt."); return; }
-
-        const signatureData = returnCanvas.toDataURL();
-        const returnDate = new Date().toLocaleDateString('de-DE') + " " + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
-        const timestamp = Date.now();
-
-        // Lösche die Items aus den Issues
-        for (let retItem of currentReturnItems) {
-            for (let issueId of retItem.issueIds) {
-                const issueRef = db.ref('issues/' + issueId);
-                const snapshot = await issueRef.once('value');
-                const issue = snapshot.val();
-                if (issue && issue.items) {
-                    let newItems = [...issue.items];
-                    for (let i = 0; i < retItem.count; i++) {
-                        const idx = newItems.indexOf(retItem.name);
-                        if (idx !== -1) newItems.splice(idx, 1);
-                    }
-                    if (newItems.length === 0) await issueRef.remove();
-                    else await issueRef.update({ items: newItems });
-                }
-            }
-        }
-
-        // Rückgabe-Eintrag in returnHistory speichern
-        const returnRecord = {
-            id: timestamp,
-            timestamp: timestamp,
-            employee: currentReturnEmployee,
-            date: returnDate,
-            items: currentReturnItems.map(i => ({ name: i.name, count: i.count })),
-            signature: signatureData
-        };
-        await db.ref('returnHistory/' + timestamp).set(returnRecord);
-
-        // PDF generieren
-        await generatePDF(null, true, returnRecord);
-
-        // UI zurücksetzen
-        document.getElementById('returnSignatureArea').classList.add('hidden');
-        clearReturnSignature();
-        currentReturnItems = [];
-        showEmployeeFullOverview(); // Aktualisiert die Ansicht
-        alert("Rückgabe erfolgreich! Die PDF wurde heruntergeladen.");
     };
 
     function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
