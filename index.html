@@ -74,6 +74,7 @@
         .material-section { display: flex; flex-direction: column; gap: 25px; }
         .section-box { border: 1px solid #ddd; border-radius: 10px; padding: 15px; background: #fafafa; }
         .cart-box { border: 2px solid #34c759; background: #f0fdf4; }
+        .returned-box { border: 2px solid #ff9500; background: #fff7e6; }
 
         .cart-item {
             display: flex;
@@ -88,7 +89,6 @@
 
         #connectionStatus { padding: 12px; text-align: center; border-radius: 8px; font-weight: bold; margin-bottom: 20px; }
 
-        /* Neuer Style für Startseite */
         .start-menu {
             display: flex;
             flex-direction: column;
@@ -118,13 +118,19 @@
             border-top: 2px solid #ff9500;
             padding-top: 20px;
         }
+        .history-return-item {
+            background: #fef9e6;
+            border-left: 4px solid #ff9500;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
 
 <div id="connectionStatus">⏳ Verbinde zur Cloud...</div>
 
-<!-- ================= HAUPTMENÜ (NUR 2 FENSTER) ================= --> <div id="mainMenu">
+<!-- HAUPTMENÜ -->
+<div id="mainMenu">
     <h1 style="text-align:center;">📋 Hauptmenü</h1>
     <div class="start-menu">
         <button class="start-btn success" onclick="showSection('ausgabe')">📤 AUSGABE</button>
@@ -132,7 +138,8 @@
     </div>
 </div>
 
-<!-- ================= AUSGABE (BISHERIGER CODE) ================= --> <div id="ausgabeSection" class="hidden">
+<!-- AUSGABE -->
+<div id="ausgabeSection" class="hidden">
     <button class="back-btn btn-small" onclick="showSection('main')">⬅️ Zurück zum Menü</button>
     <h1>📦 Material Ausgabe</h1>
 
@@ -156,7 +163,6 @@
 
     <div class="card" style="border: 2px solid #007aff;">
         <h2>📝 Neue Ausgabe erstellen</h2>
-
         <div class="selection-box">
             <label><strong>Herausgegeben von:</strong></label>
             <select id="issuerSelect"><option value="">-- Bitte wählen --</option></select>
@@ -164,25 +170,21 @@
             <label><strong>Empfänger:</strong></label>
             <select id="employeeSelect"><option value="">-- Bitte wählen --</option></select>
         </div>
-
         <div class="material-section">
             <div class="section-box">
                 <h3>Verfügbare Materialien</h3>
                 <ul id="availableMaterials"></ul>
             </div>
-
             <div class="section-box cart-box">
                 <h3>Ausgewählt für Ausgabe</h3>
                 <div id="selectedMaterials"></div>
             </div>
         </div>
-
         <div style="margin-top:25px;">
             <h3>Unterschrift des Empfängers:</h3>
             <div id="signatureWrapper"><canvas id="signaturePad"></canvas></div>
             <button class="danger btn-small" onclick="clearSignature()">Unterschrift löschen</button>
         </div>
-
         <button class="success" style="margin-top:25px;font-size:18px;padding:16px;width:100%;" onclick="saveIssue()">
             ✅ Ausgabe speichern & PDF herunterladen
         </button>
@@ -194,7 +196,7 @@
     </div>
 </div>
 
-<!-- ================= RÜCKGABE MIT UNTERSCHRIFT UND PDF ================= --> 
+<!-- RÜCKGABE MIT HISTORIE -->
 <div id="rueckgabeSection" class="hidden">
     <button class="back-btn btn-small" onclick="showSection('main')">⬅️ Zurück zum Menü</button>
     <h1>📥 Material Rückgabe</h1>
@@ -204,13 +206,22 @@
         <select id="returnEmployeeSelect" class="btn-small" style="width:100%; padding:15px; margin-bottom:15px;">
             <option value="">-- Bitte Mitarbeiter wählen --</option>
         </select>
-        <button class="success" onclick="showEmployeeMaterials()" style="width:100%;">🔍 Materialien anzeigen</button>
+        <button class="success" onclick="showEmployeeFullOverview()" style="width:100%;">🔍 Übersicht anzeigen</button>
 
-        <div id="employeeMaterialDisplay" class="employee-material-list">
-            <p style="color:#888; text-align:center;">Wählen Sie einen Mitarbeiter aus, um seine ausgeliehenen Materialien zu sehen.</p>
+        <!-- Bereich: Aktuell ausgeliehene Materialien -->
+        <div id="activeMaterialsDisplay" class="employee-material-list" style="margin-top:20px;">
+            <p style="color:#888; text-align:center;">Wählen Sie einen Mitarbeiter aus, um seine aktuell ausgeliehenen Materialien zu sehen.</p>
         </div>
 
-        <!-- Bereich für Rückgabe mit Unterschrift, wird dynamisch eingeblendet -->
+        <!-- Bereich: Historie der bereits zurückgegebenen Materialien (wie bei Ausgabe) -->
+        <div id="returnHistoryDisplay" class="card" style="margin-top:20px; background:#fff7e6;">
+            <h3>📜 Rückgabe-Historie (bereits zurückgegebene Materialien)</h3>
+            <div id="returnHistoryList">
+                <p style="color:#888; text-align:center;">Hier erscheinen die zurückgegebenen Materialien des ausgewählten Mitarbeiters.</p>
+            </div>
+        </div>
+
+        <!-- Bereich für Rückgabe mit Unterschrift -->
         <div id="returnSignatureArea" class="return-section hidden">
             <h3>✍️ Unterschrift des Mitarbeiters (Bestätigung der Rückgabe)</h3>
             <div id="returnSignatureWrapper"><canvas id="returnSignaturePad"></canvas></div>
@@ -223,7 +234,7 @@
 </div>
 
 <script>
-    // NEUE Firebase Konfiguration mit der korrekten Datenbank-URL
+    // Firebase Konfiguration
     const firebaseConfig = {
       apiKey: "AIzaSyAj5D135Fu7cEG2Qh9BB54qfrTo-TUz5nc",
       authDomain: "materialausgabe-gw.firebaseapp.com",
@@ -234,72 +245,50 @@
       appId: "1:76046257977:web:5a17562816b60a47fa62e8"
     };
 
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    } else {
-        firebase.app();
-    }
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    let employees = [], materials = [], issues = [], currentCart = [];
+    let employees = [], materials = [], issues = [], returnHistory = []; // returnHistory speichert alle Rückgabe-Einträge
+    let currentCart = [];
     let canvas, ctx;
     let returnCanvas, returnCtx;
-    let isDrawing = false;
-    let isReturnDrawing = false;
+    let isDrawing = false, isReturnDrawing = false;
     let currentReturnEmployee = null;
-    let currentReturnItems = []; // speichert die zurückzugebenden Material-Objekte {name, count, issueIds}
+    let currentReturnItems = [];
 
     // --- UI Navigation ---
     function showSection(section) {
         document.getElementById('mainMenu').classList.add('hidden');
         document.getElementById('ausgabeSection').classList.add('hidden');
         document.getElementById('rueckgabeSection').classList.add('hidden');
-
         if (section === 'main') {
             document.getElementById('mainMenu').classList.remove('hidden');
         } else if (section === 'ausgabe') {
             document.getElementById('ausgabeSection').classList.remove('hidden');
             setTimeout(() => {
-                if (!canvas) {
-                    canvas = document.getElementById('signaturePad');
-                    ctx = canvas.getContext('2d');
-                    initCanvasEvents(canvas, ctx, 'signature');
-                }
+                if (!canvas) { canvas = document.getElementById('signaturePad'); ctx = canvas.getContext('2d'); initCanvasEvents(canvas, ctx, 'signature'); }
                 resizeCanvas(canvas, ctx);
             }, 100);
         } else if (section === 'rueckgabe') {
             document.getElementById('rueckgabeSection').classList.remove('hidden');
             updateReturnDropdown();
-            // Rückgabe-Bereich und Unterschrift verstecken
             document.getElementById('returnSignatureArea').classList.add('hidden');
             currentReturnEmployee = null;
             currentReturnItems = [];
         }
     }
 
-    // --- Datenbank Listener (Live-Sync) ---
+    // --- Datenbank Listener ---
     db.ref('employees').on('value', (snapshot) => {
         const data = snapshot.val();
-        if (data && Array.isArray(data)) {
-            employees = data;
-        } else if (data && typeof data === 'object') {
-            employees = Object.values(data);
-        } else {
-            employees = ["Max Mustermann", "Anna Schmidt", "Thomas Berger"];
-        }
+        employees = (data && Array.isArray(data)) ? data : (data && typeof data === 'object') ? Object.values(data) : ["Max Mustermann", "Anna Schmidt", "Thomas Berger"];
         renderEmployees();
         updateReturnDropdown();
     });
 
     db.ref('materials').on('value', (snapshot) => {
         const data = snapshot.val();
-        if (data && Array.isArray(data)) {
-            materials = data;
-        } else if (data && typeof data === 'object') {
-            materials = Object.values(data);
-        } else {
-            materials = ["Akkuschrauber Makita", "Winkelschleifer", "Bohrhammer", "Verlängerungskabel 25m"];
-        }
+        materials = (data && Array.isArray(data)) ? data : (data && typeof data === 'object') ? Object.values(data) : ["Akkuschrauber Makita", "Winkelschleifer", "Bohrhammer", "Verlängerungskabel 25m"];
         renderMaterials();
     });
 
@@ -308,19 +297,26 @@
         issues = Object.values(data).sort((a,b) => (b.id || 0) - (a.id || 0));
         renderHistory();
         if (!document.getElementById('rueckgabeSection').classList.contains('hidden') && currentReturnEmployee) {
-            showEmployeeMaterials(); // Aktualisiert die Anzeige
+            showEmployeeFullOverview();
         }
         document.getElementById('connectionStatus').style.background = '#34c759';
         document.getElementById('connectionStatus').innerHTML = '🟢 Live verbunden – Alle Geräte sehen Änderungen sofort';
     });
 
+    // Rückgabe-Historie aus Firebase laden (separater Pfad: returnHistory)
+    db.ref('returnHistory').on('value', (snapshot) => {
+        const data = snapshot.val() || {};
+        returnHistory = Object.values(data).sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0));
+        if (!document.getElementById('rueckgabeSection').classList.contains('hidden') && currentReturnEmployee) {
+            displayReturnHistoryForEmployee(currentReturnEmployee);
+        }
+    });
+
     function renderEmployees() {
         const list = document.getElementById('employeeList');
-        if (!list) return;
-        list.innerHTML = employees.map((emp,i) =>
-            `<li>${escapeHtml(emp)} <button class="danger btn-small" onclick="deleteEmployee(${i})">Löschen</button></li>`
-        ).join('');
-
+        if (list) {
+            list.innerHTML = employees.map((emp,i) => `<li>${escapeHtml(emp)} <button class="danger btn-small" onclick="deleteEmployee(${i})">Löschen</button></li>`).join('');
+        }
         let opt = '<option value="">-- Bitte wählen --</option>' + employees.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
         const issuer = document.getElementById('issuerSelect');
         const emp = document.getElementById('employeeSelect');
@@ -330,57 +326,28 @@
 
     function renderMaterials() {
         const list = document.getElementById('materialList');
-        if (!list) return;
-        list.innerHTML = materials.map((mat,i) =>
-            `<li>${escapeHtml(mat)} <button class="danger btn-small" onclick="deleteMaterial(${i})">Löschen</button></li>`
-        ).join('');
-
+        if (list) {
+            list.innerHTML = materials.map((mat,i) => `<li>${escapeHtml(mat)} <button class="danger btn-small" onclick="deleteMaterial(${i})">Löschen</button></li>`).join('');
+        }
         const avail = document.getElementById('availableMaterials');
         if(avail) {
-            avail.innerHTML = materials.map((mat) =>
-                `<li>${escapeHtml(mat)} <button class="success btn-small" onclick="addToCart('${escapeHtml(mat).replace(/'/g, "\\'")}')">➕ Hinzufügen</button></li>`
-            ).join('');
+            avail.innerHTML = materials.map((mat) => `<li>${escapeHtml(mat)} <button class="success btn-small" onclick="addToCart('${escapeHtml(mat).replace(/'/g, "\\'")}')">➕ Hinzufügen</button></li>`).join('');
         }
     }
 
     function renderHistory() {
         const list = document.getElementById('historyList');
         if (!list) return;
-        if (issues.length === 0) {
-            list.innerHTML = '<li style="text-align:center;color:#888;">Keine Ausgaben vorhanden</li>';
-            return;
-        }
-        list.innerHTML = issues.map(issue => `
-            <li style="flex-direction:column;align-items:flex-start;">
-                <div style="width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;">
-                    <strong>${escapeHtml(issue.date)} — ${escapeHtml(issue.employee)}</strong>
-                    <div>
-                        <button class="success btn-small" onclick='generatePDF(${JSON.stringify(issue).replace(/"/g,"&quot;")})'>PDF</button>
-                        <button class="danger btn-small" onclick="deleteIssue(${issue.id})">Löschen</button>
-                    </div>
-                </div>
-                <small>Herausgeber: ${escapeHtml(issue.issuer)} | ${issue.items ? issue.items.length : 0} Teile</small>
-            </li>
-        `).join('');
+        if (issues.length === 0) { list.innerHTML = '<li style="text-align:center;color:#888;">Keine Ausgaben vorhanden</li>'; return; }
+        list.innerHTML = issues.map(issue => `<li style="flex-direction:column;align-items:flex-start;"><div style="width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;"><strong>${escapeHtml(issue.date)} — ${escapeHtml(issue.employee)}</strong><div><button class="success btn-small" onclick='generatePDF(${JSON.stringify(issue).replace(/"/g,"&quot;")})'>PDF</button><button class="danger btn-small" onclick="deleteIssue(${issue.id})">Löschen</button></div></div><small>Herausgeber: ${escapeHtml(issue.issuer)} | ${issue.items ? issue.items.length : 0} Teile</small></li>`).join('');
     }
 
-    function addEmployee() {
-        let val = document.getElementById('newEmployee').value.trim();
-        if(val) { employees.push(val); db.ref('employees').set(employees); document.getElementById('newEmployee').value = ''; }
-        else alert("Bitte einen Namen eingeben");
-    }
+    function addEmployee() { let val = document.getElementById('newEmployee').value.trim(); if(val) { employees.push(val); db.ref('employees').set(employees); document.getElementById('newEmployee').value = ''; } else alert("Bitte einen Namen eingeben"); }
     function deleteEmployee(i) { if(confirm("Mitarbeiter wirklich löschen?")) { employees.splice(i,1); db.ref('employees').set(employees); } }
-
-    function addMaterial() {
-        let val = document.getElementById('newMaterial').value.trim();
-        if(val) { materials.push(val); db.ref('materials').set(materials); document.getElementById('newMaterial').value = ''; }
-        else alert("Bitte ein Material eingeben");
-    }
+    function addMaterial() { let val = document.getElementById('newMaterial').value.trim(); if(val) { materials.push(val); db.ref('materials').set(materials); document.getElementById('newMaterial').value = ''; } else alert("Bitte ein Material eingeben"); }
     function deleteMaterial(i) { if(confirm("Material wirklich löschen?")) { materials.splice(i,1); db.ref('materials').set(materials); } }
-
     function addToCart(mat) { currentCart.push(mat); renderCart(); }
     function removeFromCart(i) { currentCart.splice(i,1); renderCart(); }
-
     function renderCart() {
         let div = document.getElementById('selectedMaterials');
         if(!div) return;
@@ -388,297 +355,221 @@
         div.innerHTML = currentCart.map((m,i) => `<div class="cart-item"><span>${escapeHtml(m)}</span><button class="danger btn-small" onclick="removeFromCart(${i})">❌ Entfernen</button></div>`).join('');
     }
 
-    // Canvas Funktionen allgemein
+    // Canvas Funktionen
     function initCanvasEvents(canvasEl, context, type) {
-        const startDraw = (e) => { e.preventDefault(); if(type === 'signature') isDrawing = true; else isReturnDrawing = true; let p = getPos(e, canvasEl); context.beginPath(); context.moveTo(p.x,p.y); };
+        const start = (e) => { e.preventDefault(); if(type === 'signature') isDrawing = true; else isReturnDrawing = true; let p = getPos(e, canvasEl); context.beginPath(); context.moveTo(p.x,p.y); };
         const draw = (e) => { if((type === 'signature' && !isDrawing) || (type === 'return' && !isReturnDrawing)) return; e.preventDefault(); let p = getPos(e, canvasEl); context.lineTo(p.x,p.y); context.stroke(); };
-        const stopDraw = () => { if(type === 'signature') isDrawing = false; else isReturnDrawing = false; };
-        canvasEl.addEventListener('touchstart', startDraw, {passive:false});
+        const stop = () => { if(type === 'signature') isDrawing = false; else isReturnDrawing = false; };
+        canvasEl.addEventListener('touchstart', start, {passive:false});
         canvasEl.addEventListener('touchmove', draw, {passive:false});
-        canvasEl.addEventListener('touchend', stopDraw);
-        canvasEl.addEventListener('mousedown', startDraw);
+        canvasEl.addEventListener('touchend', stop);
+        canvasEl.addEventListener('mousedown', start);
         canvasEl.addEventListener('mousemove', draw);
-        canvasEl.addEventListener('mouseup', stopDraw);
-        canvasEl.addEventListener('mouseout', stopDraw);
+        canvasEl.addEventListener('mouseup', stop);
+        canvasEl.addEventListener('mouseout', stop);
     }
-
-    function resizeCanvas(canvasEl, context) {
-        if(!canvasEl) return;
-        canvasEl.width = canvasEl.offsetWidth;
-        canvasEl.height = canvasEl.offsetHeight;
-        context.lineWidth = 3;
-        context.lineCap = 'round';
-        context.strokeStyle = '#000';
-        context.fillStyle = '#fff';
-        context.fillRect(0, 0, canvasEl.width, canvasEl.height);
-    }
-    window.addEventListener('resize', () => { if(canvas) resizeCanvas(canvas, ctx); if(returnCanvas) resizeCanvas(returnCanvas, returnCtx); });
-
-    function getPos(e, canvasEl) {
-        let rect = canvasEl.getBoundingClientRect();
-        let x = e.touches ? e.touches[0].clientX : e.clientX;
-        let y = e.touches ? e.touches[0].clientY : e.clientY;
-        return {x: x-rect.left, y: y-rect.top};
-    }
-
+    function resizeCanvas(canvasEl, context) { if(!canvasEl) return; canvasEl.width = canvasEl.offsetWidth; canvasEl.height = canvasEl.offsetHeight; context.lineWidth = 3; context.lineCap = 'round'; context.strokeStyle = '#000'; context.fillStyle = '#fff'; context.fillRect(0, 0, canvasEl.width, canvasEl.height); }
+    function getPos(e, canvasEl) { let rect = canvasEl.getBoundingClientRect(); let x = e.touches ? e.touches[0].clientX : e.clientX; let y = e.touches ? e.touches[0].clientY : e.clientY; return {x: x-rect.left, y: y-rect.top}; }
     function clearSignature() { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); }
     function clearReturnSignature() { if(returnCtx) { returnCtx.clearRect(0,0,returnCanvas.width,returnCanvas.height); returnCtx.fillStyle = '#fff'; returnCtx.fillRect(0,0,returnCanvas.width,returnCanvas.height); } }
-    function isCanvasBlank(canvasEl, context) {
-        const blank = document.createElement('canvas');
-        blank.width = canvasEl.width;
-        blank.height = canvasEl.height;
-        const blankCtx = blank.getContext('2d');
-        blankCtx.fillStyle = '#fff';
-        blankCtx.fillRect(0, 0, blank.width, blank.height);
-        return canvasEl.toDataURL() === blank.toDataURL();
-    }
+    function isCanvasBlank(canvasEl, context) { let blank = document.createElement('canvas'); blank.width = canvasEl.width; blank.height = canvasEl.height; let blankCtx = blank.getContext('2d'); blankCtx.fillStyle = '#fff'; blankCtx.fillRect(0,0,blank.width,blank.height); return canvasEl.toDataURL() === blank.toDataURL(); }
 
     async function saveIssue() {
         let issuer = document.getElementById('issuerSelect').value;
         let emp = document.getElementById('employeeSelect').value;
-        if(!issuer || !emp || issuer === emp || currentCart.length === 0 || isCanvasBlank(canvas, ctx)) {
-            alert("Bitte alle Felder ausfüllen (Herausgeber, Empfänger, Material und Unterschrift) und Herausgeber ≠ Empfänger!");
-            return;
-        }
+        if(!issuer || !emp || issuer === emp || currentCart.length === 0 || isCanvasBlank(canvas, ctx)) { alert("Bitte alle Felder ausfüllen!"); return; }
         let issueId = Date.now();
-        let issue = {
-            id: issueId,
-            date: new Date().toLocaleDateString('de-DE') + " " + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}),
-            issuer: issuer,
-            employee: emp,
-            items: [...currentCart],
-            signature: canvas.toDataURL()
-        };
+        let issue = { id: issueId, date: new Date().toLocaleDateString('de-DE') + " " + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}), issuer: issuer, employee: emp, items: [...currentCart], signature: canvas.toDataURL() };
         await db.ref('issues/' + issueId).set(issue);
         generatePDF(issue);
-        currentCart = [];
-        renderCart();
-        clearSignature();
-        document.getElementById('issuerSelect').value = "";
-        document.getElementById('employeeSelect').value = "";
+        currentCart = []; renderCart(); clearSignature(); document.getElementById('issuerSelect').value = ""; document.getElementById('employeeSelect').value = "";
     }
 
     async function generatePDF(issue, isReturn = false, returnInfo = null) {
         const printDiv = document.createElement('div');
-        printDiv.style.padding = "40px"; printDiv.style.fontFamily = "Arial"; printDiv.style.width = "800px";
-        printDiv.style.backgroundColor = "white";
+        printDiv.style.padding = "40px"; printDiv.style.fontFamily = "Arial"; printDiv.style.width = "800px"; printDiv.style.backgroundColor = "white";
         if (!isReturn) {
-            printDiv.innerHTML = `<h1>Übergabeprotokoll Material</h1>
-                <p><strong>Datum:</strong> ${escapeHtml(issue.date)}</p>
-                <p><strong>Herausgeber:</strong> ${escapeHtml(issue.issuer)}</p>
-                <p><strong>Empfänger:</strong> ${escapeHtml(issue.employee)}</p>
-                <h3>Übergebene Materialien:</h3>
-                <ul>${issue.items.map(item => `<li>☑ ${escapeHtml(item)}</li>`).join('')}</ul>
-                <p><strong>Unterschrift Empfänger:</strong></p>
-                <img src="${issue.signature}" style="border:1px solid #000; max-width:400px;">`;
+            printDiv.innerHTML = `<h1>Übergabeprotokoll Material</h1><p><strong>Datum:</strong> ${escapeHtml(issue.date)}</p><p><strong>Herausgeber:</strong> ${escapeHtml(issue.issuer)}</p><p><strong>Empfänger:</strong> ${escapeHtml(issue.employee)}</p><h3>Übergebene Materialien:</h3><ul>${issue.items.map(item => `<li>☑ ${escapeHtml(item)}</li>`).join('')}</ul><p><strong>Unterschrift Empfänger:</strong></p><img src="${issue.signature}" style="border:1px solid #000; max-width:400px;">`;
         } else {
-            printDiv.innerHTML = `<h1>Rückgabeprotokoll Material</h1>
-                <p><strong>Datum:</strong> ${escapeHtml(returnInfo.date)}</p>
-                <p><strong>Mitarbeiter:</strong> ${escapeHtml(returnInfo.employee)}</p>
-                <h3>Zurückgegebene Materialien:</h3>
-                <ul>${returnInfo.items.map(item => `<li>✅ ${escapeHtml(item.name)} ${item.count > 1 ? `(${item.count}x)` : ''}</li>`).join('')}</ul>
-                <p><strong>Unterschrift Mitarbeiter (Rückgabe bestätigt):</strong></p>
-                <img src="${returnInfo.signature}" style="border:1px solid #000; max-width:400px;">
-                <p><em>Die Rückgabe wurde durch den Mitarbeiter unterschrieben und ist somit gültig.</em></p>`;
+            printDiv.innerHTML = `<h1>Rückgabeprotokoll Material</h1><p><strong>Datum:</strong> ${escapeHtml(returnInfo.date)}</p><p><strong>Mitarbeiter:</strong> ${escapeHtml(returnInfo.employee)}</p><h3>Zurückgegebene Materialien:</h3><ul>${returnInfo.items.map(item => `<li>✅ ${escapeHtml(item.name)} ${item.count > 1 ? `(${item.count}x)` : ''}</li>`).join('')}</ul><p><strong>Unterschrift Mitarbeiter (Rückgabe bestätigt):</strong></p><img src="${returnInfo.signature}" style="border:1px solid #000; max-width:400px;"><p><em>Die Rückgabe wurde durch den Mitarbeiter unterschrieben und ist somit gültig.</em></p>`;
         }
         document.body.appendChild(printDiv);
         const canvasImg = await html2canvas(printDiv, {scale: 2});
         const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
         pdf.addImage(canvasImg.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 210, (canvasImg.height * 210) / canvasImg.width);
-        const filename = isReturn ? `Rueckgabe_${returnInfo.employee}_${Date.now()}.pdf` : `Material_${issue.employee}_${issue.id}.pdf`;
-        pdf.save(filename);
+        pdf.save(isReturn ? `Rueckgabe_${returnInfo.employee}_${Date.now()}.pdf` : `Material_${issue.employee}_${issue.id}.pdf`);
         document.body.removeChild(printDiv);
     }
 
     function deleteIssue(id) { if(confirm("Ausgabe wirklich löschen?")) db.ref('issues/'+id).remove(); }
 
-    // --- Rückgabe mit Unterschrift & PDF ---
+    // --- Rückgabe mit Historie ---
     function updateReturnDropdown() {
         const select = document.getElementById('returnEmployeeSelect');
-        if (!select) return;
-        select.innerHTML = '<option value="">-- Bitte Mitarbeiter wählen --</option>' + employees.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
+        if (select) select.innerHTML = '<option value="">-- Bitte Mitarbeiter wählen --</option>' + employees.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
     }
 
-    function showEmployeeMaterials() {
+    function showEmployeeFullOverview() {
         const select = document.getElementById('returnEmployeeSelect');
         const employeeName = select.value;
-        const displayDiv = document.getElementById('employeeMaterialDisplay');
-        const signatureArea = document.getElementById('returnSignatureArea');
-
-        if (!employeeName) {
-            displayDiv.innerHTML = '<p style="color:#888; text-align:center;">Bitte wählen Sie einen Mitarbeiter aus.</p>';
-            signatureArea.classList.add('hidden');
-            currentReturnEmployee = null;
-            return;
-        }
-
-        const employeeIssues = issues.filter(issue => issue.employee === employeeName);
-        if (employeeIssues.length === 0) {
-            displayDiv.innerHTML = `<p style="color:#888; text-align:center;">${escapeHtml(employeeName)} hat aktuell keine Materialien ausgeliehen.</p>`;
-            signatureArea.classList.add('hidden');
-            currentReturnEmployee = null;
-            return;
-        }
-
-        // Sammle alle Items mit Zählung und zugehörigen Issue-IDs
-        let itemMap = new Map(); // key: itemName -> {count, issueIds: Set}
-        employeeIssues.forEach(issue => {
-            if (issue.items) {
-                issue.items.forEach(item => {
-                    if (!itemMap.has(item)) {
-                        itemMap.set(item, {count: 0, issueIds: new Set()});
-                    }
-                    const entry = itemMap.get(item);
-                    entry.count++;
-                    entry.issueIds.add(issue.id);
-                });
-            }
-        });
-
-        currentReturnItems = [];
-        let html = `<h3>📋 Materialien von ${escapeHtml(employeeName)} (zum Zurückgeben auswählen):</h3><ul>`;
-        for (let [item, data] of itemMap.entries()) {
-            html += `<li style="justify-content:space-between; flex-wrap:wrap; gap:8px;">
-                        <span>${escapeHtml(item)} ${data.count > 1 ? `(${data.count}x)` : ''}</span>
-                        <button class="success btn-small" onclick="selectItemForReturn('${escapeHtml(employeeName).replace(/'/g, "\\'")}', '${escapeHtml(item).replace(/'/g, "\\'")}', ${data.count}, ${JSON.stringify(Array.from(data.issueIds))})">✅ Auswählen</button>
-                     </li>`;
-        }
-        html += '</ul><button class="secondary" style="margin-top:10px;" onclick="confirmAllReturn()">🔄 Alle Materialien auf einmal zurückgeben</button>';
-        displayDiv.innerHTML = html;
-        signatureArea.classList.add('hidden');
+        if (!employeeName) { alert("Bitte Mitarbeiter auswählen"); return; }
         currentReturnEmployee = employeeName;
+
+        // Aktive Materialien anzeigen
+        const employeeIssues = issues.filter(issue => issue.employee === employeeName);
+        const activeDiv = document.getElementById('activeMaterialsDisplay');
+        if (employeeIssues.length === 0) {
+            activeDiv.innerHTML = `<p style="color:#888; text-align:center;">${escapeHtml(employeeName)} hat aktuell keine ausgeliehenen Materialien.</p>`;
+        } else {
+            let itemMap = new Map();
+            employeeIssues.forEach(issue => { if(issue.items) issue.items.forEach(item => { itemMap.set(item, (itemMap.get(item)||0)+1); }); });
+            let html = `<h3>📋 Aktuell ausgeliehen (${escapeHtml(employeeName)}):</h3><ul>`;
+            for (let [item, count] of itemMap.entries()) {
+                html += `<li style="justify-content:space-between;"><span>${escapeHtml(item)} ${count > 1 ? `(${count}x)` : ''}</span>
+                         <button class="success btn-small" onclick="prepareReturnForItem('${escapeHtml(employeeName).replace(/'/g, "\\'")}', '${escapeHtml(item).replace(/'/g, "\\'")}', ${count})">✅ Zurückgeben</button></li>`;
+            }
+            html += `<li><button class="secondary" style="width:100%;" onclick="prepareReturnAllItems('${escapeHtml(employeeName).replace(/'/g, "\\'")}')">🔄 ALLE Materialien zurückgeben</button></li></ul>`;
+            activeDiv.innerHTML = html;
+        }
+
+        // Rückgabe-Historie anzeigen
+        displayReturnHistoryForEmployee(employeeName);
+        document.getElementById('returnSignatureArea').classList.add('hidden');
+        currentReturnItems = [];
     }
 
-    window.selectItemForReturn = function(employeeName, itemName, count, issueIdsArray) {
-        // Für einzelne Artikel: direkt Rückgabe starten (mit Unterschrift)
-        currentReturnEmployee = employeeName;
-        currentReturnItems = [{ name: itemName, count: count, issueIds: issueIdsArray }];
+    function displayReturnHistoryForEmployee(employeeName) {
+        const historyDiv = document.getElementById('returnHistoryList');
+        const employeeReturns = returnHistory.filter(r => r.employee === employeeName);
+        if (employeeReturns.length === 0) {
+            historyDiv.innerHTML = '<p style="color:#888; text-align:center;">Keine zurückgegebenen Materialien vorhanden.</p>';
+            return;
+        }
+        let html = '';
+        employeeReturns.forEach(ret => {
+            html += `<div class="history-return-item" style="padding:12px; border-bottom:1px solid #eee; background:#fff7e6;">
+                        <div style="display:flex; justify-content:space-between; flex-wrap:wrap;">
+                            <strong>📅 ${escapeHtml(ret.date)}</strong>
+                            <button class="success btn-small" onclick='generateReturnPDF(${JSON.stringify(ret).replace(/"/g,"&quot;")})'>PDF</button>
+                        </div>
+                        <div><strong>Zurückgegebene Materialien:</strong> ${ret.items.map(i => `${escapeHtml(i.name)} (${i.count}x)`).join(', ')}</div>
+                    </div>`;
+        });
+        historyDiv.innerHTML = html;
+    }
+
+    window.generateReturnPDF = async function(returnRecord) {
+        const printDiv = document.createElement('div');
+        printDiv.style.padding = "40px"; printDiv.style.fontFamily = "Arial"; printDiv.style.width = "800px"; printDiv.style.backgroundColor = "white";
+        printDiv.innerHTML = `<h1>Rückgabeprotokoll Material (Historie)</h1><p><strong>Datum:</strong> ${escapeHtml(returnRecord.date)}</p><p><strong>Mitarbeiter:</strong> ${escapeHtml(returnRecord.employee)}</p><h3>Zurückgegebene Materialien:</h3><ul>${returnRecord.items.map(item => `<li>✅ ${escapeHtml(item.name)} ${item.count > 1 ? `(${item.count}x)` : ''}</li>`).join('')}</ul><p><strong>Unterschrift Mitarbeiter:</strong></p><img src="${returnRecord.signature}" style="border:1px solid #000; max-width:400px;"><p><em>Rückgabe bestätigt.</em></p>`;
+        document.body.appendChild(printDiv);
+        const canvasImg = await html2canvas(printDiv, {scale: 2});
+        const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+        pdf.addImage(canvasImg.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 210, (canvasImg.height * 210) / canvasImg.width);
+        pdf.save(`Rueckgabe_Historie_${returnRecord.employee}_${returnRecord.timestamp}.pdf`);
+        document.body.removeChild(printDiv);
+    };
+
+    window.prepareReturnForItem = function(employeeName, itemName, count) {
+        // Finde alle Issue-IDs, die dieses Item enthalten
+        const employeeIssues = issues.filter(issue => issue.employee === employeeName);
+        let issueIds = [];
+        for (let issue of employeeIssues) {
+            if (issue.items && issue.items.includes(itemName)) {
+                for (let i = 0; i < count; i++) issueIds.push(issue.id);
+            }
+        }
+        currentReturnItems = [{ name: itemName, count: count, issueIds: issueIds.slice(0, count) }];
         showReturnSignaturePanel(employeeName, currentReturnItems);
     };
 
-    window.confirmAllReturn = function() {
-        if (!currentReturnEmployee) return;
-        // Sammle alle Items des Mitarbeiters
-        const employeeIssues = issues.filter(issue => issue.employee === currentReturnEmployee);
+    window.prepareReturnAllItems = function(employeeName) {
+        const employeeIssues = issues.filter(issue => issue.employee === employeeName);
         let itemMap = new Map();
         employeeIssues.forEach(issue => {
             if (issue.items) {
                 issue.items.forEach(item => {
-                    if (!itemMap.has(item)) {
-                        itemMap.set(item, {count: 0, issueIds: new Set()});
-                    }
-                    const entry = itemMap.get(item);
+                    if (!itemMap.has(item)) itemMap.set(item, {count: 0, issueIds: []});
+                    let entry = itemMap.get(item);
                     entry.count++;
-                    entry.issueIds.add(issue.id);
+                    entry.issueIds.push(issue.id);
                 });
             }
         });
         currentReturnItems = [];
         for (let [name, data] of itemMap.entries()) {
-            currentReturnItems.push({ name: name, count: data.count, issueIds: Array.from(data.issueIds) });
+            currentReturnItems.push({ name: name, count: data.count, issueIds: data.issueIds });
         }
-        if (currentReturnItems.length === 0) {
-            alert("Keine Materialien zum Zurückgeben.");
-            return;
-        }
-        showReturnSignaturePanel(currentReturnEmployee, currentReturnItems);
+        if (currentReturnItems.length === 0) { alert("Keine Materialien zum Zurückgeben."); return; }
+        showReturnSignaturePanel(employeeName, currentReturnItems);
     };
 
     function showReturnSignaturePanel(employeeName, items) {
         const signatureArea = document.getElementById('returnSignatureArea');
         signatureArea.classList.remove('hidden');
-        // Initialisiere Return Canvas falls nötig
         if (!returnCanvas) {
             returnCanvas = document.getElementById('returnSignaturePad');
             returnCtx = returnCanvas.getContext('2d');
             initCanvasEvents(returnCanvas, returnCtx, 'return');
             resizeCanvas(returnCanvas, returnCtx);
-        } else {
-            resizeCanvas(returnCanvas, returnCtx);
-        }
+        } else { resizeCanvas(returnCanvas, returnCtx); }
         clearReturnSignature();
-        // Optional: Zeige eine kurze Info, welche Materialien zurückgegeben werden
+        const activeDiv = document.getElementById('activeMaterialsDisplay');
         const itemList = items.map(i => `${i.name} (${i.count}x)`).join(', ');
-        const infoDiv = document.getElementById('employeeMaterialDisplay');
-        infoDiv.innerHTML += `<div style="margin-top:15px; padding:10px; background:#e9ecef; border-radius:8px;"><strong>⏳ Rückgabe vorbereitet für ${escapeHtml(employeeName)}:</strong><br>${escapeHtml(itemList)}<br><em>Bitte unten unterschreiben und bestätigen.</em></div>`;
+        activeDiv.innerHTML += `<div style="margin-top:15px; padding:10px; background:#e9ecef; border-radius:8px;"><strong>⏳ Rückgabe vorbereitet:</strong> ${escapeHtml(itemList)}<br><em>Bitte unten unterschreiben und bestätigen.</em></div>`;
     }
 
     window.confirmReturnWithSignature = async function() {
-        if (!returnCanvas || isCanvasBlank(returnCanvas, returnCtx)) {
-            alert("Bitte unterschreiben Sie die Rückgabe!");
-            return;
-        }
-        if (!currentReturnEmployee || currentReturnItems.length === 0) {
-            alert("Keine Rückgabe-Artikel ausgewählt.");
-            return;
-        }
+        if (!returnCanvas || isCanvasBlank(returnCanvas, returnCtx)) { alert("Bitte unterschreiben Sie die Rückgabe!"); return; }
+        if (!currentReturnEmployee || currentReturnItems.length === 0) { alert("Keine Rückgabe-Artikel ausgewählt."); return; }
 
         const signatureData = returnCanvas.toDataURL();
         const returnDate = new Date().toLocaleDateString('de-DE') + " " + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+        const timestamp = Date.now();
 
-        // Lösche die zugehörigen Items aus den Issues
+        // Lösche die Items aus den Issues
         for (let retItem of currentReturnItems) {
             for (let issueId of retItem.issueIds) {
                 const issueRef = db.ref('issues/' + issueId);
                 const snapshot = await issueRef.once('value');
                 const issue = snapshot.val();
                 if (issue && issue.items) {
-                    // Entferne dieses Item so oft wie benötigt (count mal)
                     let newItems = [...issue.items];
                     for (let i = 0; i < retItem.count; i++) {
-                        const index = newItems.indexOf(retItem.name);
-                        if (index !== -1) newItems.splice(index, 1);
+                        const idx = newItems.indexOf(retItem.name);
+                        if (idx !== -1) newItems.splice(idx, 1);
                     }
-                    if (newItems.length === 0) {
-                        await issueRef.remove();
-                    } else {
-                        await issueRef.update({ items: newItems });
-                    }
+                    if (newItems.length === 0) await issueRef.remove();
+                    else await issueRef.update({ items: newItems });
                 }
             }
         }
 
-        // Erstelle PDF der Rückgabe
-        const returnInfo = {
+        // Rückgabe-Eintrag in returnHistory speichern
+        const returnRecord = {
+            id: timestamp,
+            timestamp: timestamp,
             employee: currentReturnEmployee,
-            items: currentReturnItems,
-            signature: signatureData,
-            date: returnDate
+            date: returnDate,
+            items: currentReturnItems.map(i => ({ name: i.name, count: i.count })),
+            signature: signatureData
         };
-        await generatePDF(null, true, returnInfo);
+        await db.ref('returnHistory/' + timestamp).set(returnRecord);
 
-        // Reset UI
+        // PDF generieren
+        await generatePDF(null, true, returnRecord);
+
+        // UI zurücksetzen
         document.getElementById('returnSignatureArea').classList.add('hidden');
         clearReturnSignature();
         currentReturnItems = [];
-        // Aktualisiere Anzeige
-        showEmployeeMaterials();
+        showEmployeeFullOverview(); // Aktualisiert die Ansicht
         alert("Rückgabe erfolgreich! Die PDF wurde heruntergeladen.");
     };
 
-    function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/[&<>]/g, function(m) {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
-        });
-    }
+    function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
 
-    // Initialisierung
-    setTimeout(() => {
-        showSection('main');
-        if (!canvas) {
-            canvas = document.getElementById('signaturePad');
-            if (canvas) {
-                ctx = canvas.getContext('2d');
-                initCanvasEvents(canvas, ctx, 'signature');
-                resizeCanvas(canvas, ctx);
-                clearSignature();
-            }
-        }
-    }, 500);
+    setTimeout(() => { showSection('main'); if (!canvas) { canvas = document.getElementById('signaturePad'); if (canvas) { ctx = canvas.getContext('2d'); initCanvasEvents(canvas, ctx, 'signature'); resizeCanvas(canvas, ctx); clearSignature(); } } }, 500);
 </script>
 </body>
 </html>
