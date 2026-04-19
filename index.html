@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Material Verwaltung</title>
+    <title>Material Verwaltung - GW Bauservice</title>
 
-    <!-- Firebase & PDF Libs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
     <style>
+        * { box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             max-width: 900px;
@@ -42,11 +42,17 @@
             border: none;
             font-weight: bold;
             cursor: pointer;
+            transition: background-color 0.2s;
         }
         button:hover { background-color: #0056b3; }
+        button:active { transform: scale(0.98); }
         button.danger { background-color: #ff3b30; }
+        button.danger:hover { background-color: #d32f2f; }
         button.success { background-color: #34c759; }
+        button.success:hover { background-color: #2da44e; }
         button.secondary { background-color: #6c757d; }
+        button.orange { background-color: #ff9500; }
+        button.orange:hover { background-color: #e68600; }
 
         .btn-small {
             padding: 8px 14px !important;
@@ -63,17 +69,31 @@
             align-items: center;
             padding: 10px 12px;
             border-bottom: 1px solid #eee;
+            flex-wrap: wrap;
+            gap: 8px;
         }
         li:last-child { border-bottom: none; }
         .flex-row { display: flex; gap: 10px; align-items: center; }
         .flex-row input { flex: 1; }
 
-        #signatureWrapper { border: 2px dashed #007aff; border-radius: 8px; background: #fafafa; margin: 15px 0; overflow: hidden; }
-        #signaturePad { width: 100%; height: 250px; display: block; touch-action: none; }
+        .signature-wrapper {
+            border: 2px dashed #007aff;
+            border-radius: 8px;
+            background: #fafafa;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+        .signature-wrapper canvas {
+            width: 100%;
+            height: 250px;
+            display: block;
+            touch-action: none;
+        }
 
-        .material-section { display: flex; flex-direction: column; gap: 25px; }
+        .material-section { display: flex; flex-direction: column; gap: 25px; margin-top: 20px; }
         .section-box { border: 1px solid #ddd; border-radius: 10px; padding: 15px; background: #fafafa; }
-        .cart-box { border: 2px solid #34c759; background: #f0fdf4; }
+        .cart-box-green { border: 2px solid #34c759; background: #f0fdf4; }
+        .cart-box-orange { border: 2px solid #ff9500; background: #fff8f0; }
 
         .cart-item {
             display: flex;
@@ -85,7 +105,14 @@
             margin-bottom: 8px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
-        #connectionStatus { padding: 12px; text-align: center; border-radius: 8px; font-weight: bold; margin-bottom: 20px; }
+
+        #connectionStatus {
+            padding: 12px;
+            text-align: center;
+            border-radius: 8px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
 
         .start-menu {
             display: flex;
@@ -111,6 +138,64 @@
             padding: 15px;
             border-radius: 10px;
         }
+
+        .return-material-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .return-material-row .mat-name {
+            flex: 1;
+            min-width: 150px;
+            font-weight: 500;
+        }
+        .return-material-row .mat-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .qty-select {
+            width: 75px !important;
+            padding: 8px !important;
+            font-size: 15px !important;
+            text-align: center;
+            font-weight: bold;
+            border: 2px solid #ff9500 !important;
+            border-radius: 8px !important;
+            background: #fff8f0;
+        }
+
+        .history-return-item {
+            background: #fff;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .logo-container {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .logo-container img {
+            max-width: 280px;
+            width: 70%;
+            height: auto;
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            .start-btn { padding: 22px !important; font-size: 22px !important; }
+            .return-material-row { flex-direction: column; align-items: stretch; }
+            .return-material-row .mat-controls { justify-content: flex-end; }
+        }
     </style>
 </head>
 <body>
@@ -119,10 +204,13 @@
 
 <!-- ================= HAUPTMENÜ ================= -->
 <div id="mainMenu">
-    <h1 style="text-align:center;">📋 Hauptmenü</h1>
+    <div class="logo-container">
+        <img src="logo.png" alt="GW Bauservice Logo">
+    </div>
+    <h1 style="text-align:center; margin-top:5px;">📋 Materialverwaltung</h1>
     <div class="start-menu">
         <button class="start-btn success" onclick="showSection('ausgabe')">📤 AUSGABE</button>
-        <button class="start-btn" onclick="showSection('rueckgabe')" style="background-color:#ff9500;">📥 RÜCKGABE</button>
+        <button class="start-btn orange" onclick="showSection('rueckgabe')">📥 RÜCKGABE</button>
     </div>
 </div>
 
@@ -152,7 +240,7 @@
     <div class="card" style="border: 2px solid #007aff;">
         <h2>📝 Neue Ausgabe erstellen</h2>
 
-        <div class="selection-box">
+        <div>
             <label><strong>Herausgegeben von:</strong></label>
             <select id="issuerSelect"><option value="">-- Bitte wählen --</option></select>
             <div style="height:10px"></div>
@@ -166,15 +254,17 @@
                 <ul id="availableMaterials"></ul>
             </div>
 
-            <div class="section-box cart-box">
-                <h3>Ausgewählt für Ausgabe</h3>
-                <div id="selectedMaterials"></div>
+            <div class="section-box cart-box-green">
+                <h3>✅ Ausgewählt für Ausgabe</h3>
+                <div id="selectedMaterials">
+                    <p style="color:#888; text-align:center; padding:20px 0;">Noch kein Material ausgewählt</p>
+                </div>
             </div>
         </div>
 
         <div style="margin-top:25px;">
-            <h3>Unterschrift des Empfängers:</h3>
-            <div id="signatureWrapper"><canvas id="signaturePad"></canvas></div>
+            <h3>✍️ Unterschrift des Empfängers:</h3>
+            <div class="signature-wrapper"><canvas id="signaturePad"></canvas></div>
             <button class="danger btn-small" onclick="clearSignature()">Unterschrift löschen</button>
         </div>
 
@@ -194,54 +284,78 @@
     <button class="back-btn btn-small" onclick="showSection('main')">⬅️ Zurück zum Menü</button>
     <h1>📥 Material Rückgabe</h1>
 
-    <div class="card">
-        <h2>👤 Mitarbeiter auswählen</h2>
-        <select id="returnEmployeeSelect" class="btn-small" style="width:100%; padding:15px; margin-bottom:15px;">
-            <option value="">-- Bitte Mitarbeiter wählen --</option>
-        </select>
-        <button class="success" onclick="showEmployeeMaterials()" style="width:100%;">🔍 Materialien anzeigen</button>
+    <div class="card" style="border: 2px solid #ff9500;">
+        <h2>📝 Neue Rückgabe erstellen</h2>
 
-        <div id="employeeMaterialDisplay" class="employee-material-list">
-            <p style="color:#888; text-align:center;">Wählen Sie einen Mitarbeiter aus, um seine ausgeliehenen Materialien zu sehen.</p>
+        <div>
+            <label><strong>Mitarbeiter auswählen:</strong></label>
+            <select id="returnEmployeeSelect"><option value="">-- Bitte Mitarbeiter wählen --</option></select>
+            <button class="orange" onclick="showEmployeeMaterials()" style="width:100%; margin-top:10px;">🔍 Materialien anzeigen</button>
         </div>
-    </div>
 
-    <!-- Bereich für Unterschrift bei Rückgabe -->
-    <div id="returnSignatureArea" class="card hidden">
-        <h3>Unterschrift für Rückgabe</h3>
-        <div id="returnSignatureWrapper"><canvas id="returnSignaturePad"></canvas></div>
-        <button class="danger btn-small" onclick="clearReturnSignature()">Löschen</button>
-        <button class="success" style="margin-top:15px; width:100%;" onclick="confirmReturn()">✅ Rückgabe bestätigen & PDF herunterladen</button>
+        <!-- Materialien des Mitarbeiters -->
+        <div id="returnMaterialSection" class="hidden">
+            <div class="material-section">
+                <div class="section-box">
+                    <h3>📋 Ausgeliehene Materialien</h3>
+                    <div id="returnAvailableMaterials">
+                        <p style="color:#888; text-align:center;">Keine Materialien vorhanden.</p>
+                    </div>
+                </div>
+
+                <div class="section-box cart-box-orange">
+                    <h3>📦 Ausgewählt für Rückgabe</h3>
+                    <div id="returnCartItems">
+                        <p style="color:#888; text-align:center; padding:20px 0;">Noch kein Material für Rückgabe ausgewählt</p>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:25px;">
+                <h3>✍️ Unterschrift des Rückgebenden:</h3>
+                <div class="signature-wrapper"><canvas id="returnSignaturePad"></canvas></div>
+                <button class="danger btn-small" onclick="clearReturnSignature()">Unterschrift löschen</button>
+            </div>
+
+            <button class="success" style="margin-top:25px;font-size:18px;padding:16px;width:100%;" onclick="confirmReturn()">
+                ✅ Rückgabe bestätigen & PDF herunterladen
+            </button>
+        </div>
     </div>
 
     <div class="card">
         <h2>📜 Rückgabe-Historie</h2>
-        <ul id="returnHistoryList"></ul>
+        <div id="returnHistoryList">
+            <p style="color:#888; text-align:center;">Wählen Sie einen Mitarbeiter, um die Historie zu sehen.</p>
+        </div>
     </div>
 </div>
 
+<!-- ================= JAVASCRIPT ================= -->
 <script>
     // Firebase Init
     var firebaseConfig = {
-      apiKey: "AIzaSyAj5D135Fu7cEG2Qh9BB54qfrTo-TUz5nc",
-      authDomain: "material---ausgabe.firebaseapp.com",
-      databaseURL: "https://material---ausgabe-default-rtdb.europe-west1.firebasedatabase.app/",
-      projectId: "material---ausgabe",
-      storageBucket: "material---ausgabe.firebasestorage.app",
-      messagingSenderId: "76046257977",
-      appId: "1:76046257977:web:5a17562816b60a47fa62e8"
+        apiKey: "AIzaSyAj5D135Fu7cEG2Qh9BB54qfrTo-TUz5nc",
+        authDomain: "material---ausgabe.firebaseapp.com",
+        databaseURL: "https://material---ausgabe-default-rtdb.europe-west1.firebasedatabase.app/",
+        projectId: "material---ausgabe",
+        storageBucket: "material---ausgabe.firebasestorage.app",
+        messagingSenderId: "76046257977",
+        appId: "1:76046257977:web:5a17562816b60a47fa62e8"
     };
     firebase.initializeApp(firebaseConfig);
     var db = firebase.database();
 
-    let employees = [], materials = [], issues = [], currentCart = [];
-    let returnHistory = [];        // Rückgabe-Historie aus Firebase
+    // Globale Variablen
+    let employees = [], materials = [], issues = [], returnHistory = [];
+    let currentCart = [];
     let currentReturnEmployee = '';
-    let currentReturnSelections = []; // [{name, totalBorrowed, returnQuantity}]
+    let currentReturnItems = [];       // [{name, count}]
+    let currentReturnSelections = [];   // [{name, totalBorrowed, returnQuantity}]
     let canvas, ctx, returnCanvas, returnCtx;
     let isDrawing = false;
 
-    // --- UI Navigation ---
+    // ===================== NAVIGATION =====================
     function showSection(section) {
         document.getElementById('mainMenu').classList.add('hidden');
         document.getElementById('ausgabeSection').classList.add('hidden');
@@ -255,78 +369,68 @@
                 if (!canvas) {
                     canvas = document.getElementById('signaturePad');
                     ctx = canvas.getContext('2d');
-                    initCanvasEvents(canvas, ctx, 'signature');
-                    resizeCanvas(canvas, ctx);
-                    clearSignature();
+                    initCanvasEvents(canvas, ctx);
                 }
                 resizeCanvas(canvas, ctx);
-            }, 100);
+            }, 150);
         } else if (section === 'rueckgabe') {
             document.getElementById('rueckgabeSection').classList.remove('hidden');
-            setTimeout(() => {
-                if (!returnCanvas) {
-                    returnCanvas = document.getElementById('returnSignaturePad');
-                    returnCtx = returnCanvas.getContext('2d');
-                    initCanvasEvents(returnCanvas, returnCtx, 'returnSignature');
-                    resizeCanvas(returnCanvas, returnCtx);
-                    clearReturnSignature();
-                }
-                resizeCanvas(returnCanvas, returnCtx);
-            }, 100);
             updateReturnDropdown();
         }
     }
 
-    // --- Datenbank Listener ---
+    // ===================== DATENBANK LISTENER =====================
     db.ref('/').on('value', (snapshot) => {
         const data = snapshot.val() || {};
-        employees = data.employees || ["Max Mustermann", "Anna Schmidt", "Thomas Berger"];
-        materials = data.materials || ["Akkuschrauber Makita", "Winkelschleifer", "Bohrhammer", "Verlängerungskabel 25m"];
-        issues = Object.values(data.issues || {}).sort((a,b) => b.id - a.id);
-        returnHistory = Object.values(data.returnHistory || {}).sort((a,b) => b.timestamp - a.timestamp);
+        employees = data.employees || [];
+        materials = data.materials || [];
+        issues = Object.values(data.issues || {}).sort((a, b) => b.id - a.id);
+        returnHistory = Object.values(data.returnHistory || {}).sort((a, b) => b.timestamp - a.timestamp);
 
         document.getElementById('connectionStatus').style.background = '#34c759';
-        document.getElementById('connectionStatus').innerHTML = '🟢 Live verbunden – Alle Geräte sehen Änderungen sofort';
+        document.getElementById('connectionStatus').style.color = '#fff';
+        document.getElementById('connectionStatus').innerHTML = '🟢 Live verbunden – Alle Geräte synchronisiert';
 
         renderAll();
     });
 
+    // ===================== RENDER FUNKTIONEN =====================
     function renderAll() {
         renderEmployees();
         renderMaterials();
         renderHistory();
+        renderCart();
         updateReturnDropdown();
         if (currentReturnEmployee) {
             displayReturnHistoryForEmployee(currentReturnEmployee);
         }
     }
 
-    // --- Ausgabe Funktionen ---
     function renderEmployees() {
         const list = document.getElementById('employeeList');
         if (!list) return;
-        list.innerHTML = employees.map((emp,i) =>
-            `<li>${emp} <button class="danger btn-small" onclick="deleteEmployee(${i})">Löschen</button></li>`
+        list.innerHTML = employees.map((emp, i) =>
+            `<li><span>${esc(emp)}</span> <button class="danger btn-small" onclick="deleteEmployee(${i})">Löschen</button></li>`
         ).join('');
 
-        let opt = '<option value="">-- Bitte wählen --</option>' + employees.map(e => `<option value="${e}">${e}</option>`).join('');
+        let opt = '<option value="">-- Bitte wählen --</option>' + employees.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join('');
         const issuer = document.getElementById('issuerSelect');
         const emp = document.getElementById('employeeSelect');
-        if(issuer) issuer.innerHTML = opt;
-        if(emp) emp.innerHTML = opt;
+        if (issuer) issuer.innerHTML = opt;
+        if (emp) emp.innerHTML = opt;
     }
 
     function renderMaterials() {
         const list = document.getElementById('materialList');
         if (!list) return;
-        list.innerHTML = materials.map((mat,i) =>
-            `<li>${mat} <button class="danger btn-small" onclick="deleteMaterial(${i})">Löschen</button></li>`
+        list.innerHTML = materials.map((mat, i) =>
+            `<li><span>${esc(mat)}</span> <button class="danger btn-small" onclick="deleteMaterial(${i})">Löschen</button></li>`
         ).join('');
 
         const avail = document.getElementById('availableMaterials');
-        if(avail) {
-            avail.innerHTML = materials.map((mat) =>
-                `<li>${mat} <button class="success btn-small" onclick="addToCart('${mat}')">➕ Hinzufügen</button></li>`
+        if (avail) {
+            avail.innerHTML = materials.map((mat, i) =>
+                `<li><span>${esc(mat)}</span> <button class="success btn-small" onclick="addToCart(${i})">➕ Hinzufügen</button></li>`
             ).join('');
         }
     }
@@ -334,105 +438,147 @@
     function renderHistory() {
         const list = document.getElementById('historyList');
         if (!list) return;
+        if (issues.length === 0) {
+            list.innerHTML = '<li style="justify-content:center; color:#888;">Noch keine Ausgaben vorhanden.</li>';
+            return;
+        }
         list.innerHTML = issues.map(issue => `
             <li style="flex-direction:column;align-items:flex-start;">
-                <div style="width:100%;display:flex;justify-content:space-between;">
-                    <strong>${issue.date} — ${issue.employee}</strong>
-                    <div>
-                        <button class="success btn-small" onclick='generateIssuePDF(${JSON.stringify(issue).replace(/"/g,"&quot;")})'>PDF</button>
-                        <button class="danger btn-small" onclick="deleteIssue(${issue.id})">Löschen</button>
+                <div style="width:100%;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                    <strong>${esc(issue.date)} — ${esc(issue.employee)}</strong>
+                    <div style="display:flex;gap:5px;">
+                        <button class="success btn-small" onclick="generateIssuePDFById(${issue.id})">📄 PDF</button>
+                        <button class="danger btn-small" onclick="deleteIssue(${issue.id})">🗑️</button>
                     </div>
                 </div>
-                <small>Herausgeber: ${issue.issuer} | ${issue.items.length} Teile</small>
+                <small style="color:#666; margin-top:4px;">Herausgeber: ${esc(issue.issuer)} | ${issue.items.length} Teil(e)</small>
             </li>
         `).join('');
     }
 
+    // ===================== MITARBEITER & MATERIAL CRUD =====================
     function addEmployee() {
         let val = document.getElementById('newEmployee').value.trim();
-        if(val) { employees.push(val); db.ref('employees').set(employees); document.getElementById('newEmployee').value = ''; }
+        if (!val) return alert("Bitte einen Namen eingeben.");
+        if (employees.includes(val)) return alert("Mitarbeiter existiert bereits.");
+        employees.push(val);
+        db.ref('employees').set(employees);
+        document.getElementById('newEmployee').value = '';
     }
-    function deleteEmployee(i) { employees.splice(i,1); db.ref('employees').set(employees); }
+    function deleteEmployee(i) {
+        if (confirm(`"${employees[i]}" wirklich löschen?`)) {
+            employees.splice(i, 1);
+            db.ref('employees').set(employees);
+        }
+    }
 
     function addMaterial() {
         let val = document.getElementById('newMaterial').value.trim();
-        if(val) { materials.push(val); db.ref('materials').set(materials); document.getElementById('newMaterial').value = ''; }
+        if (!val) return alert("Bitte ein Material eingeben.");
+        materials.push(val);
+        db.ref('materials').set(materials);
+        document.getElementById('newMaterial').value = '';
     }
-    function deleteMaterial(i) { materials.splice(i,1); db.ref('materials').set(materials); }
+    function deleteMaterial(i) {
+        if (confirm(`"${materials[i]}" wirklich löschen?`)) {
+            materials.splice(i, 1);
+            db.ref('materials').set(materials);
+        }
+    }
 
-    function addToCart(mat) { currentCart.push(mat); renderCart(); }
-    function removeFromCart(i) { currentCart.splice(i,1); renderCart(); }
+    // ===================== WARENKORB (AUSGABE) =====================
+    function addToCart(i) { currentCart.push(materials[i]); renderCart(); }
+    function removeFromCart(i) { currentCart.splice(i, 1); renderCart(); }
 
     function renderCart() {
         let div = document.getElementById('selectedMaterials');
-        if(!div) return;
-        if(currentCart.length === 0) {
+        if (!div) return;
+        if (currentCart.length === 0) {
             div.innerHTML = '<p style="color:#888; text-align:center; padding:20px 0;">Noch kein Material ausgewählt</p>';
             return;
         }
-        div.innerHTML = currentCart.map((m,i) => `
+        div.innerHTML = currentCart.map((m, i) => `
             <div class="cart-item">
-                <span>${m}</span>
+                <span>${esc(m)}</span>
                 <button class="danger btn-small" onclick="removeFromCart(${i})">❌ Entfernen</button>
             </div>
         `).join('');
     }
 
-    // Canvas Funktionen (Ausgabe & Rückgabe)
-    function initCanvasEvents(canv, context, type) {
-        const start = (e) => { e.preventDefault(); isDrawing = true; let p = getPos(e, canv); context.beginPath(); context.moveTo(p.x,p.y); };
-        const draw = (e) => { if(!isDrawing) return; e.preventDefault(); let p = getPos(e, canv); context.lineTo(p.x,p.y); context.stroke(); };
+    // ===================== CANVAS / UNTERSCHRIFT =====================
+    function initCanvasEvents(canv, context) {
+        const start = (e) => {
+            e.preventDefault();
+            isDrawing = true;
+            let p = getPos(e, canv);
+            context.beginPath();
+            context.moveTo(p.x, p.y);
+        };
+        const move = (e) => {
+            if (!isDrawing) return;
+            e.preventDefault();
+            let p = getPos(e, canv);
+            context.lineTo(p.x, p.y);
+            context.stroke();
+        };
         const stop = () => { isDrawing = false; };
 
-        canv.addEventListener('touchstart', start, {passive:false});
-        canv.addEventListener('touchmove', draw, {passive:false});
+        canv.addEventListener('touchstart', start, { passive: false });
+        canv.addEventListener('touchmove', move, { passive: false });
         canv.addEventListener('touchend', stop);
         canv.addEventListener('mousedown', start);
-        canv.addEventListener('mousemove', draw);
+        canv.addEventListener('mousemove', move);
         canv.addEventListener('mouseup', stop);
         canv.addEventListener('mouseout', stop);
     }
 
     function resizeCanvas(canv, context) {
-        if(!canv) return;
-        canv.width = canv.offsetWidth;
-        canv.height = canv.offsetHeight;
+        if (!canv) return;
+        const w = canv.offsetWidth;
+        const h = canv.offsetHeight;
+        if (w === 0 || h === 0) return;
+        canv.width = w;
+        canv.height = h;
         context.lineWidth = 3;
         context.lineCap = 'round';
         context.strokeStyle = '#000';
     }
     window.addEventListener('resize', () => {
-        if(canvas) resizeCanvas(canvas, ctx);
-        if(returnCanvas) resizeCanvas(returnCanvas, returnCtx);
+        if (canvas && ctx) resizeCanvas(canvas, ctx);
+        if (returnCanvas && returnCtx) resizeCanvas(returnCanvas, returnCtx);
     });
 
     function getPos(e, canv) {
         let rect = canv.getBoundingClientRect();
         let x = e.touches ? e.touches[0].clientX : e.clientX;
         let y = e.touches ? e.touches[0].clientY : e.clientY;
-        return {x: x-rect.left, y:y-rect.top};
+        return { x: x - rect.left, y: y - rect.top };
     }
 
-    function clearSignature() { if(ctx) ctx.clearRect(0,0,canvas.width,canvas.height); }
-    function clearReturnSignature() { if(returnCtx) returnCtx.clearRect(0,0,returnCanvas.width,returnCanvas.height); }
+    function clearSignature() { if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height); }
+    function clearReturnSignature() { if (returnCtx && returnCanvas) returnCtx.clearRect(0, 0, returnCanvas.width, returnCanvas.height); }
 
     function isCanvasBlank(canv) {
         let b = document.createElement('canvas');
-        b.width = canv.width; b.height = canv.height;
+        b.width = canv.width;
+        b.height = canv.height;
         return canv.toDataURL() === b.toDataURL();
     }
 
+    // ===================== AUSGABE SPEICHERN =====================
     async function saveIssue() {
         let issuer = document.getElementById('issuerSelect').value;
         let emp = document.getElementById('employeeSelect').value;
-        if(!issuer || !emp || issuer === emp || currentCart.length === 0 || isCanvasBlank(canvas)) {
-            return alert("Bitte alle Felder ausfüllen (Herausgeber, Empfänger, Material und Unterschrift)!");
-        }
+        if (!issuer) return alert("Bitte einen Herausgeber auswählen!");
+        if (!emp) return alert("Bitte einen Empfänger auswählen!");
+        if (issuer === emp) return alert("Herausgeber und Empfänger dürfen nicht identisch sein!");
+        if (currentCart.length === 0) return alert("Bitte mindestens ein Material auswählen!");
+        if (isCanvasBlank(canvas)) return alert("Bitte die Unterschrift des Empfängers eintragen!");
 
         let issueId = Date.now();
         let issue = {
             id: issueId,
-            date: new Date().toLocaleDateString('de-DE') + " " + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}),
+            date: formatDateTime(),
             issuer: issuer,
             employee: emp,
             items: [...currentCart],
@@ -447,154 +593,182 @@
         clearSignature();
         document.getElementById('issuerSelect').value = "";
         document.getElementById('employeeSelect').value = "";
+        alert("✅ Ausgabe erfolgreich gespeichert!");
     }
 
+    // ===================== AUSGABE PDF =====================
     async function generateIssuePDF(issue) {
         const printDiv = document.createElement('div');
-        printDiv.style.padding = "40px"; printDiv.style.fontFamily = "Arial"; printDiv.style.width = "800px";
+        printDiv.style.cssText = "padding:40px; font-family:Arial; width:800px; background:#fff;";
         printDiv.innerHTML = `
-            <h1>Übergabeprotokoll Material</h1>
+            <h1 style="color:#333; border-bottom:2px solid #007aff; padding-bottom:10px;">Übergabeprotokoll Material</h1>
             <p><strong>Datum:</strong> ${issue.date}</p>
             <p><strong>Herausgeber:</strong> ${issue.issuer}</p>
             <p><strong>Empfänger:</strong> ${issue.employee}</p>
-            <h3>Übergebene Materialien:</h3>
-            <ul>${issue.items.map(item => `<li>☑ ${item}</li>`).join('')}</ul>
-            <p><strong>Unterschrift Empfänger:</strong></p>
-            <img src="${issue.signature}" style="border:1px solid #000; max-width:400px;">
+            <h3 style="margin-top:20px;">Übergebene Materialien:</h3>
+            <ul style="list-style:none; padding:0;">${issue.items.map(item => `<li style="padding:5px 0; border-bottom:1px solid #eee;">☑ ${item}</li>`).join('')}</ul>
+            <p style="margin-top:30px;"><strong>Unterschrift Empfänger:</strong></p>
+            <img src="${issue.signature}" style="border:1px solid #000; max-width:400px; margin-top:10px;">
+            <p style="margin-top:30px; color:#888; font-size:12px;">GW Bauservice – Materialverwaltung</p>
         `;
         document.body.appendChild(printDiv);
-        const canvasImg = await html2canvas(printDiv, {scale: 2});
-        const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
-        pdf.addImage(canvasImg.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 210, (canvasImg.height * 210) / canvasImg.width);
-        pdf.save(`Material_${issue.employee}_${issue.id}.pdf`);
+        try {
+            const canvasImg = await html2canvas(printDiv, { scale: 2 });
+            const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+            const imgHeight = (canvasImg.height * 210) / canvasImg.width;
+            pdf.addImage(canvasImg.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 210, imgHeight);
+            pdf.save(`Ausgabe_${issue.employee}_${issue.id}.pdf`);
+        } catch (err) {
+            console.error("PDF Fehler:", err);
+            alert("PDF konnte nicht erstellt werden.");
+        }
         document.body.removeChild(printDiv);
     }
 
-    function deleteIssue(id) {
-        if(confirm("Ausgabe wirklich löschen?")) db.ref('issues/'+id).remove();
+    function generateIssuePDFById(id) {
+        const issue = issues.find(i => i.id === id);
+        if (issue) generateIssuePDF(issue);
+        else alert("Ausgabe nicht gefunden.");
     }
 
-    // --- Rückgabe Funktionen (NEU & OPTIMIERT) ---
+    function deleteIssue(id) {
+        if (confirm("Ausgabe wirklich löschen?")) db.ref('issues/' + id).remove();
+    }
+
+    // ===================== RÜCKGABE FUNKTIONEN =====================
     function updateReturnDropdown() {
         const select = document.getElementById('returnEmployeeSelect');
         if (!select) return;
         select.innerHTML = '<option value="">-- Bitte Mitarbeiter wählen --</option>' +
-            employees.map(e => `<option value="${e}">${e}</option>`).join('');
+            employees.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join('');
     }
 
     function showEmployeeMaterials() {
-        const select = document.getElementById('returnEmployeeSelect');
-        const employeeName = select.value;
-        const displayDiv = document.getElementById('employeeMaterialDisplay');
+        const employeeName = document.getElementById('returnEmployeeSelect').value;
+        if (!employeeName) return alert("Bitte einen Mitarbeiter auswählen.");
+
         currentReturnEmployee = employeeName;
+        currentReturnSelections = [];
 
-        if (!employeeName) {
-            displayDiv.innerHTML = '<p style="color:#888; text-align:center;">Bitte wählen Sie einen Mitarbeiter aus.</p>';
-            return;
-        }
+        // Alle Issues dieses Mitarbeiters finden
+        const employeeIssues = issues.filter(i => i.employee === employeeName);
+        const matSection = document.getElementById('returnMaterialSection');
 
-        // Alle Issues des Mitarbeiters sammeln
-        const employeeIssues = issues.filter(issue => issue.employee === employeeName);
         if (employeeIssues.length === 0) {
-            displayDiv.innerHTML = `<p style="color:#888; text-align:center;">${employeeName} hat aktuell keine Materialien ausgeliehen.</p>`;
+            matSection.classList.add('hidden');
+            document.getElementById('returnAvailableMaterials').innerHTML =
+                `<p style="color:#888; text-align:center;">${esc(employeeName)} hat keine ausgeliehenen Materialien.</p>`;
             displayReturnHistoryForEmployee(employeeName);
+            // Trotzdem anzeigen für die Historie
+            matSection.classList.remove('hidden');
+            document.getElementById('returnCartItems').innerHTML =
+                '<p style="color:#888; text-align:center; padding:20px 0;">Keine Materialien vorhanden</p>';
             return;
         }
 
-        // Alle Materialien mit Anzahl gruppieren
+        // Materialien gruppieren und zählen
         let itemCounts = {};
         employeeIssues.forEach(issue => {
             issue.items.forEach(item => { itemCounts[item] = (itemCounts[item] || 0) + 1; });
         });
 
-        let html = `<h3>📋 Materialien von ${employeeName}:</h3><ul>`;
-        for (let [item, count] of Object.entries(itemCounts)) {
-            html += `<li style="justify-content:space-between;">
-                        <span>${item} ${count > 1 ? `(${count}x)` : ''}</span>
-                        <button class="success btn-small" onclick="prepareReturnItem('${employeeName}', '${item}', ${count})">✅ Auswählen</button>
-                     </li>`;
-        }
-        html += `</ul>
-                <hr style="margin:20px 0;">
-                <div id="returnSelectionSummary"></div>
-                <button class="success" style="width:100%;" onclick="proceedToSignature()">✍️ Weiter zur Unterschrift</button>`;
-        displayDiv.innerHTML = html;
-        currentReturnSelections = [];
-        updateReturnSelectionSummary();
+        currentReturnItems = Object.entries(itemCounts); // [[name, count], ...]
+
+        // Materialien-Liste rendern
+        const listDiv = document.getElementById('returnAvailableMaterials');
+        listDiv.innerHTML = currentReturnItems.map(([name, count], idx) => {
+            let options = '';
+            for (let i = 1; i <= count; i++) {
+                options += `<option value="${i}"${i === 1 ? ' selected' : ''}>${i}x</option>`;
+            }
+            return `<div class="return-material-row">
+                        <span class="mat-name">${esc(name)} <small style="color:#888;">(${count}x ausgeliehen)</small></span>
+                        <div class="mat-controls">
+                            <select class="qty-select" id="returnQty_${idx}">${options}</select>
+                            <button class="success btn-small" onclick="addToReturnCart(${idx})">➕ Hinzufügen</button>
+                        </div>
+                    </div>`;
+        }).join('');
+
+        // Rückgabe-Bereich anzeigen
+        matSection.classList.remove('hidden');
+        renderReturnCart();
+
+        // Return-Canvas initialisieren
+        setTimeout(() => {
+            if (!returnCanvas) {
+                returnCanvas = document.getElementById('returnSignaturePad');
+                returnCtx = returnCanvas.getContext('2d');
+                initCanvasEvents(returnCanvas, returnCtx);
+            }
+            resizeCanvas(returnCanvas, returnCtx);
+            clearReturnSignature();
+        }, 200);
+
+        // Rückgabe-Historie anzeigen
         displayReturnHistoryForEmployee(employeeName);
     }
 
-    function prepareReturnItem(empName, itemName, maxQty) {
-        // Prüfen, ob bereits ausgewählt
-        let existing = currentReturnSelections.find(s => s.name === itemName);
+    function addToReturnCart(idx) {
+        const [name, maxCount] = currentReturnItems[idx];
+        const qtySelect = document.getElementById('returnQty_' + idx);
+        const qty = parseInt(qtySelect.value);
+
+        // Prüfen, ob bereits im Warenkorb
+        const existing = currentReturnSelections.find(s => s.name === name);
         if (existing) {
-            alert(`Material "${itemName}" ist bereits ausgewählt.`);
+            alert(`"${name}" ist bereits zur Rückgabe ausgewählt.\nEntfernen Sie es zuerst, um die Anzahl zu ändern.`);
             return;
         }
-        // Eingabe der Rückgabemenge
-        let qty = prompt(`Wie viele "${itemName}" werden zurückgegeben? (Max: ${maxQty})`, maxQty);
-        if (qty === null) return;
-        qty = parseInt(qty);
-        if (isNaN(qty) || qty <= 0 || qty > maxQty) {
-            alert(`Bitte eine gültige Anzahl zwischen 1 und ${maxQty} eingeben.`);
-            return;
-        }
-        currentReturnSelections.push({ name: itemName, totalBorrowed: maxQty, returnQuantity: qty });
-        updateReturnSelectionSummary();
-    }
 
-    function updateReturnSelectionSummary() {
-        const summaryDiv = document.getElementById('returnSelectionSummary');
-        if (!summaryDiv) return;
-        if (currentReturnSelections.length === 0) {
-            summaryDiv.innerHTML = '<p style="color:#888;">Noch keine Materialien für Rückgabe ausgewählt.</p>';
-            return;
-        }
-        let html = '<h4>Ausgewählte Rückgaben:</h4><ul>';
-        currentReturnSelections.forEach((sel, idx) => {
-            html += `<li style="justify-content:space-between;">
-                        ${sel.name}: ${sel.returnQuantity} von ${sel.totalBorrowed}
-                        <button class="danger btn-small" onclick="removeReturnSelection(${idx})">❌</button>
-                     </li>`;
+        currentReturnSelections.push({
+            name: name,
+            totalBorrowed: maxCount,
+            returnQuantity: qty
         });
-        html += '</ul>';
-        summaryDiv.innerHTML = html;
+
+        renderReturnCart();
     }
 
-    function removeReturnSelection(idx) {
+    function removeFromReturnCart(idx) {
         currentReturnSelections.splice(idx, 1);
-        updateReturnSelectionSummary();
+        renderReturnCart();
     }
 
-    function proceedToSignature() {
+    function renderReturnCart() {
+        const div = document.getElementById('returnCartItems');
+        if (!div) return;
         if (currentReturnSelections.length === 0) {
-            alert("Bitte mindestens ein Material zur Rückgabe auswählen.");
+            div.innerHTML = '<p style="color:#888; text-align:center; padding:20px 0;">Noch kein Material für Rückgabe ausgewählt</p>';
             return;
         }
-        document.getElementById('returnSignatureArea').classList.remove('hidden');
-        // Canvas zurücksetzen
-        clearReturnSignature();
+        div.innerHTML = currentReturnSelections.map((sel, idx) => `
+            <div class="cart-item">
+                <span><strong>${esc(sel.name)}</strong>: ${sel.returnQuantity}x zurückgeben</span>
+                <button class="danger btn-small" onclick="removeFromReturnCart(${idx})">❌ Entfernen</button>
+            </div>
+        `).join('');
     }
 
+    // ===================== RÜCKGABE BESTÄTIGEN =====================
     async function confirmReturn() {
-        if (isCanvasBlank(returnCanvas)) {
-            alert("Bitte unterschreiben Sie die Rückgabe.");
-            return;
-        }
+        if (currentReturnSelections.length === 0) return alert("Bitte mindestens ein Material zur Rückgabe auswählen.");
+        if (!returnCanvas || isCanvasBlank(returnCanvas)) return alert("Bitte die Unterschrift eintragen!");
+
         const signatureData = returnCanvas.toDataURL();
         const timestamp = Date.now();
-        const returnDate = new Date().toLocaleDateString('de-DE') + " " + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+        const returnDate = formatDateTime();
 
-        // Rückgabe-Datensatz (OHNE PDF!)
+        // Rückgabe-Datensatz erstellen (NUR Daten, KEINE PDF in Firebase!)
         const returnRecord = {
             id: timestamp,
             timestamp: timestamp,
             employee: currentReturnEmployee,
             date: returnDate,
-            items: currentReturnSelections.map(sel => ({ 
-                name: sel.name, 
+            items: currentReturnSelections.map(sel => ({
+                name: sel.name,
                 totalBorrowed: sel.totalBorrowed,
-                returnQuantity: sel.returnQuantity 
+                returnQuantity: sel.returnQuantity
             })),
             signature: signatureData
         };
@@ -602,113 +776,154 @@
         // 1. In Firebase speichern
         await db.ref('returnHistory/' + timestamp).set(returnRecord);
 
-        // 2. Materialien aus den ursprünglichen Issues abziehen (einfache Logik: nur Zähler reduzieren)
-        // Da wir keine Mengen in den Issues speichern, sondern nur String-Listen, gehen wir pragmatisch vor:
-        // Wir löschen die Issues des Mitarbeiters komplett und legen neue mit reduzierter Anzahl an.
-        // (Für eine robuste Lösung müsste man jeden Issue einzeln bearbeiten, aber für diesen Anwendungsfall reicht ein einfacher Ansatz)
-        const employeeIssues = issues.filter(issue => issue.employee === currentReturnEmployee);
-        let remainingItems = [];
-        
-        // Alte Issues sammeln und in eine flache Liste konvertieren
+        // 2. Materialien aus den Issues des Mitarbeiters abziehen
+        const employeeIssues = issues.filter(i => i.employee === currentReturnEmployee);
         let allBorrowed = [];
         employeeIssues.forEach(issue => { allBorrowed = allBorrowed.concat(issue.items); });
-        
-        // Rückgaben abziehen
+
+        // Rückgegebene Mengen entfernen
         currentReturnSelections.forEach(sel => {
-            for (let i=0; i<sel.returnQuantity; i++) {
+            for (let i = 0; i < sel.returnQuantity; i++) {
                 const index = allBorrowed.indexOf(sel.name);
                 if (index !== -1) allBorrowed.splice(index, 1);
             }
         });
-        
+
         // Alte Issues des Mitarbeiters löschen
         for (let issue of employeeIssues) {
             await db.ref('issues/' + issue.id).remove();
         }
-        
-        // Neue Issues aus den verbleibenden Materialien erstellen (als einen Issue pro Mitarbeiter, um einfach zu bleiben)
+
+        // Neuen Issue mit verbleibenden Materialien erstellen
         if (allBorrowed.length > 0) {
             const newIssueId = Date.now() + 1;
-            const newIssue = {
+            await db.ref('issues/' + newIssueId).set({
                 id: newIssueId,
-                date: new Date().toLocaleDateString('de-DE') + " " + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}),
-                issuer: "System (Rückgabe)",
+                date: formatDateTime(),
+                issuer: "System (nach Rückgabe)",
                 employee: currentReturnEmployee,
                 items: allBorrowed,
                 signature: ""
-            };
-            await db.ref('issues/' + newIssueId).set(newIssue);
+            });
         }
 
-        // 3. PDF generieren und herunterladen
+        // 3. PDF automatisch generieren und herunterladen
         generateReturnPDF(returnRecord);
 
-        // UI zurücksetzen
-        document.getElementById('returnSignatureArea').classList.add('hidden');
+        // 4. UI zurücksetzen
         clearReturnSignature();
         currentReturnSelections = [];
-        showEmployeeMaterials(); // aktualisiert die Anzeige
-        alert("Rückgabe erfolgreich! Das PDF wurde heruntergeladen.");
+        renderReturnCart();
+        showEmployeeMaterials(); // Aktualisiert die Anzeige
+        alert("✅ Rückgabe erfolgreich gespeichert! PDF wurde heruntergeladen.");
     }
 
+    // ===================== RÜCKGABE PDF =====================
     function generateReturnPDF(record) {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
-        
-        doc.setFontSize(20);
-        doc.text("Rücksende-Beleg GW-Bauservice", 105, 20, null, null, "center");
-        
+
+        // Header
+        doc.setFontSize(22);
+        doc.setTextColor(50, 50, 50);
+        doc.text("GW BAUSERVICE", 105, 20, null, null, "center");
+
+        doc.setFontSize(16);
+        doc.setTextColor(255, 149, 0);
+        doc.text("Rückgabe-Beleg", 105, 30, null, null, "center");
+
+        // Linie
+        doc.setDrawColor(255, 149, 0);
+        doc.setLineWidth(0.5);
+        doc.line(20, 35, 190, 35);
+
+        // Infos
         doc.setFontSize(12);
-        doc.text(`Mitarbeiter: ${record.employee}`, 20, 40);
-        doc.text(`Datum der Rückgabe: ${record.date}`, 20, 50);
-        
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Mitarbeiter: ${record.employee}`, 20, 48);
+        doc.text(`Datum: ${record.date}`, 20, 58);
+
+        // Materialien Tabelle
         doc.setFontSize(14);
-        doc.text("Zurückgegebene Artikel:", 20, 70);
+        doc.setTextColor(50, 50, 50);
+        doc.text("Zurückgegebene Materialien:", 20, 75);
+
         doc.setFontSize(12);
-        
-        let yPos = 80;
+        doc.setTextColor(0, 0, 0);
+        let yPos = 88;
+
+        // Tabellenkopf
+        doc.setFillColor(240, 240, 240);
+        doc.rect(20, yPos - 6, 170, 10, 'F');
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text("Material", 25, yPos);
+        doc.text("Zurückgegeben", 120, yPos);
+        doc.text("Ausgeliehen", 160, yPos);
+        yPos += 12;
+
+        doc.setFont(undefined, 'normal');
         record.items.forEach(item => {
-            doc.text(`- ${item.name}: ${item.returnQuantity} Stück (von ehemals ${item.totalBorrowed})`, 25, yPos);
+            doc.text(`${item.name}`, 25, yPos);
+            doc.text(`${item.returnQuantity}x`, 130, yPos);
+            doc.text(`${item.totalBorrowed}x`, 168, yPos);
+            // Trennlinie
+            doc.setDrawColor(220, 220, 220);
+            doc.line(20, yPos + 3, 190, yPos + 3);
             yPos += 10;
         });
-        
-        yPos += 20;
+
+        // Unterschrift
+        yPos += 15;
+        doc.setFontSize(12);
         doc.text("Unterschrift:", 20, yPos);
         if (record.signature) {
-            doc.addImage(record.signature, 'PNG', 20, yPos + 5, 80, 40);
-        } else {
-            doc.text("Keine Unterschrift hinterlegt.", 20, yPos + 10);
+            try {
+                doc.addImage(record.signature, 'PNG', 20, yPos + 5, 80, 40);
+            } catch (e) {
+                doc.text("(Unterschrift konnte nicht geladen werden)", 20, yPos + 15);
+            }
         }
-        
+
+        // Footer
+        doc.setFontSize(9);
+        doc.setTextColor(150, 150, 150);
+        doc.text("GW Bauservice – Materialverwaltung | Automatisch erstellt", 105, 285, null, null, "center");
+
         doc.save(`Rueckgabe_${record.employee}_${record.id}.pdf`);
     }
 
+    // ===================== RÜCKGABE HISTORIE =====================
     function displayReturnHistoryForEmployee(employeeName) {
         const historyDiv = document.getElementById('returnHistoryList');
         if (!historyDiv) return;
+
         const employeeReturns = returnHistory.filter(r => r.employee === employeeName);
         if (employeeReturns.length === 0) {
-            historyDiv.innerHTML = '<p style="color:#888; text-align:center;">Keine Rückgaben vorhanden.</p>';
+            historyDiv.innerHTML = '<p style="color:#888; text-align:center;">Keine Rückgaben für diesen Mitarbeiter vorhanden.</p>';
             return;
         }
+
         let html = '';
         employeeReturns.forEach(ret => {
-            html += `<div class="history-return-item" style="background:#fff; border-radius:8px; padding:12px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-                        <div style="display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center;">
-                            <strong>📅 ${escapeHtml(ret.date)}</strong>
-                            <button class="pdf-btn success btn-small" onclick="generateReturnPDFFromHistory('${ret.id}')">📄 PDF herunterladen</button>
+            html += `<div class="history-return-item">
+                        <div style="display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; gap:8px;">
+                            <strong>📅 ${esc(ret.date)} – ${esc(ret.employee)}</strong>
+                            <div style="display:flex; gap:5px;">
+                                <button class="success btn-small" onclick="regenerateReturnPDF('${ret.id}')">📄 PDF</button>
+                                <button class="danger btn-small" onclick="deleteReturn('${ret.id}')">🗑️</button>
+                            </div>
                         </div>
-                        <div style="margin-top:8px;">
-                            <strong>Zurückgegebene Materialien:</strong><br>
-                            ${ret.items.map(i => `✅ ${escapeHtml(i.name)}: ${i.returnQuantity} von ${i.totalBorrowed} Stück`).join('<br>')}
+                        <div style="margin-top:8px; font-size:14px;">
+                            ${ret.items.map(i => `<div style="padding:2px 0;">✅ ${esc(i.name)}: <strong>${i.returnQuantity}x</strong> zurückgegeben (von ${i.totalBorrowed}x)</div>`).join('')}
                         </div>
                     </div>`;
         });
         historyDiv.innerHTML = html;
     }
 
-    window.generateReturnPDFFromHistory = function(recordId) {
-        const record = returnHistory.find(r => r.id == recordId);
+    window.regenerateReturnPDF = function(recordId) {
+        const record = returnHistory.find(r => String(r.id) === String(recordId));
         if (record) {
             generateReturnPDF(record);
         } else {
@@ -716,17 +931,29 @@
         }
     };
 
-    function escapeHtml(str) { 
-        if (!str) return ''; 
-        return str.replace(/[&<>]/g, function(m) { 
-            if (m === '&') return '&amp;'; 
-            if (m === '<') return '&lt;'; 
-            if (m === '>') return '&gt;'; 
-            return m; 
-        }); 
+    window.deleteReturn = function(recordId) {
+        if (confirm("Rückgabe-Eintrag wirklich löschen?")) {
+            db.ref('returnHistory/' + recordId).remove();
+        }
+    };
+
+    // ===================== HILFSFUNKTIONEN =====================
+    function esc(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
-    // Startseite anzeigen
+    function formatDateTime() {
+        const now = new Date();
+        return now.toLocaleDateString('de-DE') + " " + now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // ===================== START =====================
     showSection('main');
 </script>
 </body>
