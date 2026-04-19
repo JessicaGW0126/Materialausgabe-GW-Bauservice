@@ -69,7 +69,7 @@
         .flex-row input { flex: 1; }
 
         #signatureWrapper { border: 2px dashed #007aff; border-radius: 8px; background: #fafafa; margin: 15px 0; overflow: hidden; }
-        #signaturePad { width: 100%; height: 250px; display: block; touch-action: none; }
+        #signaturePad, #returnSignaturePad { width: 100%; height: 250px; display: block; touch-action: none; }
 
         .material-section { display: flex; flex-direction: column; gap: 25px; }
         .section-box { border: 1px solid #ddd; border-radius: 10px; padding: 15px; background: #fafafa; }
@@ -112,6 +112,11 @@
             background: #f9f9f9;
             padding: 15px;
             border-radius: 10px;
+        }
+        .return-section {
+            margin-top: 25px;
+            border-top: 2px solid #ff9500;
+            padding-top: 20px;
         }
     </style>
 </head>
@@ -189,7 +194,8 @@
     </div>
 </div>
 
-<!-- ================= RÜCKGABE ================= --> <div id="rueckgabeSection" class="hidden">
+<!-- ================= RÜCKGABE MIT UNTERSCHRIFT UND PDF ================= --> 
+<div id="rueckgabeSection" class="hidden">
     <button class="back-btn btn-small" onclick="showSection('main')">⬅️ Zurück zum Menü</button>
     <h1>📥 Material Rückgabe</h1>
 
@@ -201,8 +207,17 @@
         <button class="success" onclick="showEmployeeMaterials()" style="width:100%;">🔍 Materialien anzeigen</button>
 
         <div id="employeeMaterialDisplay" class="employee-material-list">
-            <!-- Hier werden die Materialien des gewählten Mitarbeiters angezeigt -->
             <p style="color:#888; text-align:center;">Wählen Sie einen Mitarbeiter aus, um seine ausgeliehenen Materialien zu sehen.</p>
+        </div>
+
+        <!-- Bereich für Rückgabe mit Unterschrift, wird dynamisch eingeblendet -->
+        <div id="returnSignatureArea" class="return-section hidden">
+            <h3>✍️ Unterschrift des Mitarbeiters (Bestätigung der Rückgabe)</h3>
+            <div id="returnSignatureWrapper"><canvas id="returnSignaturePad"></canvas></div>
+            <button class="danger btn-small" onclick="clearReturnSignature()">Unterschrift löschen</button>
+            <button id="confirmReturnBtn" class="success" style="margin-top:20px; width:100%; padding:16px; font-size:18px;" onclick="confirmReturnWithSignature()">
+                ✅ Rückgabe bestätigen & PDF erstellen
+            </button>
         </div>
     </div>
 </div>
@@ -219,17 +234,20 @@
       appId: "1:76046257977:web:5a17562816b60a47fa62e8"
     };
 
-    // Firebase initialisieren (falls noch nicht initialisiert)
     if (!firebase.apps.length) {
         firebase.initializeApp(firebaseConfig);
     } else {
-        firebase.app(); // use existing app
+        firebase.app();
     }
     const db = firebase.database();
 
     let employees = [], materials = [], issues = [], currentCart = [];
     let canvas, ctx;
+    let returnCanvas, returnCtx;
     let isDrawing = false;
+    let isReturnDrawing = false;
+    let currentReturnEmployee = null;
+    let currentReturnItems = []; // speichert die zurückzugebenden Material-Objekte {name, count, issueIds}
 
     // --- UI Navigation ---
     function showSection(section) {
@@ -241,39 +259,38 @@
             document.getElementById('mainMenu').classList.remove('hidden');
         } else if (section === 'ausgabe') {
             document.getElementById('ausgabeSection').classList.remove('hidden');
-            // Canvas initialisieren, sobald sichtbar
             setTimeout(() => {
                 if (!canvas) {
                     canvas = document.getElementById('signaturePad');
                     ctx = canvas.getContext('2d');
-                    initCanvasEvents();
+                    initCanvasEvents(canvas, ctx, 'signature');
                 }
-                resizeCanvas();
+                resizeCanvas(canvas, ctx);
             }, 100);
         } else if (section === 'rueckgabe') {
             document.getElementById('rueckgabeSection').classList.remove('hidden');
-            // Dropdown für Rückgabe aktualisieren
             updateReturnDropdown();
+            // Rückgabe-Bereich und Unterschrift verstecken
+            document.getElementById('returnSignatureArea').classList.add('hidden');
+            currentReturnEmployee = null;
+            currentReturnItems = [];
         }
     }
 
-    // --- Datenbank Listener (Live-Sync für employees, materials, issues) ---
-    // Mitarbeiter synchronisieren
+    // --- Datenbank Listener (Live-Sync) ---
     db.ref('employees').on('value', (snapshot) => {
         const data = snapshot.val();
         if (data && Array.isArray(data)) {
             employees = data;
         } else if (data && typeof data === 'object') {
-            // Falls als Objekt gespeichert, in Array umwandeln (sicherheitshalber)
             employees = Object.values(data);
         } else {
             employees = ["Max Mustermann", "Anna Schmidt", "Thomas Berger"];
         }
         renderEmployees();
-        updateReturnDropdown(); // Dropdown für Rückgabe aktualisieren
+        updateReturnDropdown();
     });
 
-    // Materialien synchronisieren
     db.ref('materials').on('value', (snapshot) => {
         const data = snapshot.val();
         if (data && Array.isArray(data)) {
@@ -286,16 +303,12 @@
         renderMaterials();
     });
 
-    // Ausgaben synchronisieren (issues als Objekt mit IDs)
     db.ref('issues').on('value', (snapshot) => {
         const data = snapshot.val() || {};
-        // issues als Array speichern, sortiert nach ID absteigend
         issues = Object.values(data).sort((a,b) => (b.id || 0) - (a.id || 0));
         renderHistory();
-        // Wenn Rückgabe-Bereich gerade offen ist, aktualisiere die Anzeige (falls ein Mitarbeiter ausgewählt ist)
-        const returnSelect = document.getElementById('returnEmployeeSelect');
-        if (returnSelect && returnSelect.value && !document.getElementById('rueckgabeSection').classList.contains('hidden')) {
-            showEmployeeMaterials(); // Aktualisiert die Materialliste des ausgewählten Mitarbeiters
+        if (!document.getElementById('rueckgabeSection').classList.contains('hidden') && currentReturnEmployee) {
+            showEmployeeMaterials(); // Aktualisiert die Anzeige
         }
         document.getElementById('connectionStatus').style.background = '#34c759';
         document.getElementById('connectionStatus').innerHTML = '🟢 Live verbunden – Alle Geräte sehen Änderungen sofort';
@@ -305,7 +318,7 @@
         const list = document.getElementById('employeeList');
         if (!list) return;
         list.innerHTML = employees.map((emp,i) =>
-            `<li>${emp} <button class="danger btn-small" onclick="deleteEmployee(${i})">Löschen</button></li>`
+            `<li>${escapeHtml(emp)} <button class="danger btn-small" onclick="deleteEmployee(${i})">Löschen</button></li>`
         ).join('');
 
         let opt = '<option value="">-- Bitte wählen --</option>' + employees.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
@@ -353,116 +366,80 @@
 
     function addEmployee() {
         let val = document.getElementById('newEmployee').value.trim();
-        if(val) { 
-            employees.push(val); 
-            db.ref('employees').set(employees); 
-            document.getElementById('newEmployee').value = ''; 
-        } else {
-            alert("Bitte einen Namen eingeben");
-        }
+        if(val) { employees.push(val); db.ref('employees').set(employees); document.getElementById('newEmployee').value = ''; }
+        else alert("Bitte einen Namen eingeben");
     }
-    function deleteEmployee(i) { 
-        if(confirm("Mitarbeiter wirklich löschen?")) {
-            employees.splice(i,1); 
-            db.ref('employees').set(employees); 
-        }
-    }
+    function deleteEmployee(i) { if(confirm("Mitarbeiter wirklich löschen?")) { employees.splice(i,1); db.ref('employees').set(employees); } }
 
     function addMaterial() {
         let val = document.getElementById('newMaterial').value.trim();
-        if(val) { 
-            materials.push(val); 
-            db.ref('materials').set(materials); 
-            document.getElementById('newMaterial').value = ''; 
-        } else {
-            alert("Bitte ein Material eingeben");
-        }
+        if(val) { materials.push(val); db.ref('materials').set(materials); document.getElementById('newMaterial').value = ''; }
+        else alert("Bitte ein Material eingeben");
     }
-    function deleteMaterial(i) { 
-        if(confirm("Material wirklich löschen?")) {
-            materials.splice(i,1); 
-            db.ref('materials').set(materials); 
-        }
-    }
+    function deleteMaterial(i) { if(confirm("Material wirklich löschen?")) { materials.splice(i,1); db.ref('materials').set(materials); } }
 
-    function addToCart(mat) { 
-        currentCart.push(mat); 
-        renderCart(); 
-    }
-    function removeFromCart(i) { 
-        currentCart.splice(i,1); 
-        renderCart(); 
-    }
+    function addToCart(mat) { currentCart.push(mat); renderCart(); }
+    function removeFromCart(i) { currentCart.splice(i,1); renderCart(); }
 
     function renderCart() {
         let div = document.getElementById('selectedMaterials');
         if(!div) return;
-        if(currentCart.length === 0) {
-            div.innerHTML = '<p style="color:#888; text-align:center; padding:20px 0;">Noch kein Material ausgewählt</p>';
-            return;
-        }
-        div.innerHTML = currentCart.map((m,i) => `
-            <div class="cart-item">
-                <span>${escapeHtml(m)}</span>
-                <button class="danger btn-small" onclick="removeFromCart(${i})">❌ Entfernen</button>
-            </div>
-        `).join('');
+        if(currentCart.length === 0) { div.innerHTML = '<p style="color:#888; text-align:center; padding:20px 0;">Noch kein Material ausgewählt</p>'; return; }
+        div.innerHTML = currentCart.map((m,i) => `<div class="cart-item"><span>${escapeHtml(m)}</span><button class="danger btn-small" onclick="removeFromCart(${i})">❌ Entfernen</button></div>`).join('');
     }
 
-    // Canvas Funktionen
-    function initCanvasEvents() {
-        canvas.addEventListener('touchstart', startDrawing, {passive:false});
-        canvas.addEventListener('touchmove', draw, {passive:false});
-        canvas.addEventListener('touchend', stopDrawing);
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('mouseout', stopDrawing);
+    // Canvas Funktionen allgemein
+    function initCanvasEvents(canvasEl, context, type) {
+        const startDraw = (e) => { e.preventDefault(); if(type === 'signature') isDrawing = true; else isReturnDrawing = true; let p = getPos(e, canvasEl); context.beginPath(); context.moveTo(p.x,p.y); };
+        const draw = (e) => { if((type === 'signature' && !isDrawing) || (type === 'return' && !isReturnDrawing)) return; e.preventDefault(); let p = getPos(e, canvasEl); context.lineTo(p.x,p.y); context.stroke(); };
+        const stopDraw = () => { if(type === 'signature') isDrawing = false; else isReturnDrawing = false; };
+        canvasEl.addEventListener('touchstart', startDraw, {passive:false});
+        canvasEl.addEventListener('touchmove', draw, {passive:false});
+        canvasEl.addEventListener('touchend', stopDraw);
+        canvasEl.addEventListener('mousedown', startDraw);
+        canvasEl.addEventListener('mousemove', draw);
+        canvasEl.addEventListener('mouseup', stopDraw);
+        canvasEl.addEventListener('mouseout', stopDraw);
     }
 
-    function resizeCanvas() {
-        if(!canvas) return;
-        canvas.width = canvas.offsetWidth;
-        canvas.height = canvas.offsetHeight;
-        ctx.lineWidth = 3;
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = '#000';
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    function resizeCanvas(canvasEl, context) {
+        if(!canvasEl) return;
+        canvasEl.width = canvasEl.offsetWidth;
+        canvasEl.height = canvasEl.offsetHeight;
+        context.lineWidth = 3;
+        context.lineCap = 'round';
+        context.strokeStyle = '#000';
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, canvasEl.width, canvasEl.height);
     }
-    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('resize', () => { if(canvas) resizeCanvas(canvas, ctx); if(returnCanvas) resizeCanvas(returnCanvas, returnCtx); });
 
-    function getPos(e) {
-        let rect = canvas.getBoundingClientRect();
+    function getPos(e, canvasEl) {
+        let rect = canvasEl.getBoundingClientRect();
         let x = e.touches ? e.touches[0].clientX : e.clientX;
         let y = e.touches ? e.touches[0].clientY : e.clientY;
         return {x: x-rect.left, y: y-rect.top};
     }
 
-    function startDrawing(e){e.preventDefault(); isDrawing=true; let p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y);}
-    function draw(e){if(!isDrawing)return; e.preventDefault(); let p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke();}
-    function stopDrawing(){isDrawing=false;}
-
-    function clearSignature(){ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);}
-    function isCanvasBlank(){
-        // Prüft ob außer weißem Hintergrund was gezeichnet wurde
+    function clearSignature() { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); }
+    function clearReturnSignature() { if(returnCtx) { returnCtx.clearRect(0,0,returnCanvas.width,returnCanvas.height); returnCtx.fillStyle = '#fff'; returnCtx.fillRect(0,0,returnCanvas.width,returnCanvas.height); } }
+    function isCanvasBlank(canvasEl, context) {
         const blank = document.createElement('canvas');
-        blank.width = canvas.width;
-        blank.height = canvas.height;
+        blank.width = canvasEl.width;
+        blank.height = canvasEl.height;
         const blankCtx = blank.getContext('2d');
         blankCtx.fillStyle = '#fff';
         blankCtx.fillRect(0, 0, blank.width, blank.height);
-        return canvas.toDataURL() === blank.toDataURL();
+        return canvasEl.toDataURL() === blank.toDataURL();
     }
 
     async function saveIssue() {
         let issuer = document.getElementById('issuerSelect').value;
         let emp = document.getElementById('employeeSelect').value;
-        if(!issuer || !emp || issuer === emp || currentCart.length === 0 || isCanvasBlank()) {
+        if(!issuer || !emp || issuer === emp || currentCart.length === 0 || isCanvasBlank(canvas, ctx)) {
             alert("Bitte alle Felder ausfüllen (Herausgeber, Empfänger, Material und Unterschrift) und Herausgeber ≠ Empfänger!");
             return;
         }
-
         let issueId = Date.now();
         let issue = {
             id: issueId,
@@ -472,10 +449,8 @@
             items: [...currentCart],
             signature: canvas.toDataURL()
         };
-
         await db.ref('issues/' + issueId).set(issue);
         generatePDF(issue);
-
         currentCart = [];
         renderCart();
         clearSignature();
@@ -483,118 +458,204 @@
         document.getElementById('employeeSelect').value = "";
     }
 
-    async function generatePDF(issue) {
+    async function generatePDF(issue, isReturn = false, returnInfo = null) {
         const printDiv = document.createElement('div');
         printDiv.style.padding = "40px"; printDiv.style.fontFamily = "Arial"; printDiv.style.width = "800px";
         printDiv.style.backgroundColor = "white";
-        printDiv.innerHTML = `
-            <h1>Übergabeprotokoll Material</h1>
-            <p><strong>Datum:</strong> ${escapeHtml(issue.date)}</p>
-            <p><strong>Herausgeber:</strong> ${escapeHtml(issue.issuer)}</p>
-            <p><strong>Empfänger:</strong> ${escapeHtml(issue.employee)}</p>
-            <h3>Übergebene Materialien:</h3>
-            <ul>${issue.items.map(item => `<li>☑ ${escapeHtml(item)}</li>`).join('')}</ul>
-            <p><strong>Unterschrift Empfänger:</strong></p>
-            <img src="${issue.signature}" style="border:1px solid #000; max-width:400px;">
-        `;
+        if (!isReturn) {
+            printDiv.innerHTML = `<h1>Übergabeprotokoll Material</h1>
+                <p><strong>Datum:</strong> ${escapeHtml(issue.date)}</p>
+                <p><strong>Herausgeber:</strong> ${escapeHtml(issue.issuer)}</p>
+                <p><strong>Empfänger:</strong> ${escapeHtml(issue.employee)}</p>
+                <h3>Übergebene Materialien:</h3>
+                <ul>${issue.items.map(item => `<li>☑ ${escapeHtml(item)}</li>`).join('')}</ul>
+                <p><strong>Unterschrift Empfänger:</strong></p>
+                <img src="${issue.signature}" style="border:1px solid #000; max-width:400px;">`;
+        } else {
+            printDiv.innerHTML = `<h1>Rückgabeprotokoll Material</h1>
+                <p><strong>Datum:</strong> ${escapeHtml(returnInfo.date)}</p>
+                <p><strong>Mitarbeiter:</strong> ${escapeHtml(returnInfo.employee)}</p>
+                <h3>Zurückgegebene Materialien:</h3>
+                <ul>${returnInfo.items.map(item => `<li>✅ ${escapeHtml(item.name)} ${item.count > 1 ? `(${item.count}x)` : ''}</li>`).join('')}</ul>
+                <p><strong>Unterschrift Mitarbeiter (Rückgabe bestätigt):</strong></p>
+                <img src="${returnInfo.signature}" style="border:1px solid #000; max-width:400px;">
+                <p><em>Die Rückgabe wurde durch den Mitarbeiter unterschrieben und ist somit gültig.</em></p>`;
+        }
         document.body.appendChild(printDiv);
         const canvasImg = await html2canvas(printDiv, {scale: 2});
         const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
         pdf.addImage(canvasImg.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, 210, (canvasImg.height * 210) / canvasImg.width);
-        pdf.save(`Material_${issue.employee}_${issue.id}.pdf`);
+        const filename = isReturn ? `Rueckgabe_${returnInfo.employee}_${Date.now()}.pdf` : `Material_${issue.employee}_${issue.id}.pdf`;
+        pdf.save(filename);
         document.body.removeChild(printDiv);
     }
 
-    function deleteIssue(id) {
-        if(confirm("Ausgabe wirklich löschen?")) db.ref('issues/'+id).remove();
-    }
+    function deleteIssue(id) { if(confirm("Ausgabe wirklich löschen?")) db.ref('issues/'+id).remove(); }
 
-    // --- Rückgabe Funktionen ---
+    // --- Rückgabe mit Unterschrift & PDF ---
     function updateReturnDropdown() {
         const select = document.getElementById('returnEmployeeSelect');
         if (!select) return;
-        select.innerHTML = '<option value="">-- Bitte Mitarbeiter wählen --</option>' +
-            employees.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
+        select.innerHTML = '<option value="">-- Bitte Mitarbeiter wählen --</option>' + employees.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
     }
 
     function showEmployeeMaterials() {
         const select = document.getElementById('returnEmployeeSelect');
         const employeeName = select.value;
         const displayDiv = document.getElementById('employeeMaterialDisplay');
+        const signatureArea = document.getElementById('returnSignatureArea');
 
         if (!employeeName) {
             displayDiv.innerHTML = '<p style="color:#888; text-align:center;">Bitte wählen Sie einen Mitarbeiter aus.</p>';
+            signatureArea.classList.add('hidden');
+            currentReturnEmployee = null;
             return;
         }
 
-        // Alle Ausgaben dieses Mitarbeiters
         const employeeIssues = issues.filter(issue => issue.employee === employeeName);
-
         if (employeeIssues.length === 0) {
             displayDiv.innerHTML = `<p style="color:#888; text-align:center;">${escapeHtml(employeeName)} hat aktuell keine Materialien ausgeliehen.</p>`;
+            signatureArea.classList.add('hidden');
+            currentReturnEmployee = null;
             return;
         }
 
-        // Alle Materialien aus allen Issues des Mitarbeiters sammeln
-        let allItems = [];
+        // Sammle alle Items mit Zählung und zugehörigen Issue-IDs
+        let itemMap = new Map(); // key: itemName -> {count, issueIds: Set}
         employeeIssues.forEach(issue => {
-            if (issue.items) allItems = allItems.concat(issue.items);
+            if (issue.items) {
+                issue.items.forEach(item => {
+                    if (!itemMap.has(item)) {
+                        itemMap.set(item, {count: 0, issueIds: new Set()});
+                    }
+                    const entry = itemMap.get(item);
+                    entry.count++;
+                    entry.issueIds.add(issue.id);
+                });
+            }
         });
 
-        // Gruppieren und zählen
-        let itemCounts = {};
-        allItems.forEach(item => { itemCounts[item] = (itemCounts[item] || 0) + 1; });
-
-        let html = `<h3>📋 Materialien von ${escapeHtml(employeeName)}:</h3><ul>`;
-        for (let [item, count] of Object.entries(itemCounts)) {
+        currentReturnItems = [];
+        let html = `<h3>📋 Materialien von ${escapeHtml(employeeName)} (zum Zurückgeben auswählen):</h3><ul>`;
+        for (let [item, data] of itemMap.entries()) {
             html += `<li style="justify-content:space-between; flex-wrap:wrap; gap:8px;">
-                        <span>${escapeHtml(item)} ${count > 1 ? `(${count}x)` : ''}</span>
-                        <button class="success btn-small" onclick="returnSingleItem('${escapeHtml(employeeName).replace(/'/g, "\\'")}', '${escapeHtml(item).replace(/'/g, "\\'")}')">✅ Zurückgeben</button>
+                        <span>${escapeHtml(item)} ${data.count > 1 ? `(${data.count}x)` : ''}</span>
+                        <button class="success btn-small" onclick="selectItemForReturn('${escapeHtml(employeeName).replace(/'/g, "\\'")}', '${escapeHtml(item).replace(/'/g, "\\'")}', ${data.count}, ${JSON.stringify(Array.from(data.issueIds))})">✅ Auswählen</button>
                      </li>`;
         }
-        html += '</ul>';
-        html += `<button class="danger" style="margin-top:15px; width:100%;" onclick="returnAllItems('${escapeHtml(employeeName).replace(/'/g, "\\'")}')">🔄 ALLE Materialien von ${escapeHtml(employeeName)} zurückgeben</button>`;
-
+        html += '</ul><button class="secondary" style="margin-top:10px;" onclick="confirmAllReturn()">🔄 Alle Materialien auf einmal zurückgeben</button>';
         displayDiv.innerHTML = html;
+        signatureArea.classList.add('hidden');
+        currentReturnEmployee = employeeName;
     }
 
-    window.returnSingleItem = function(employeeName, itemName) {
-        if (!confirm(`Soll "${itemName}" wirklich zurückgegeben werden?`)) return;
-
-        // Finde den ersten Issue, der dieses Item enthält
-        let issueToModify = null;
-        for (let issue of issues) {
-            if (issue.employee === employeeName && issue.items && issue.items.includes(itemName)) {
-                issueToModify = issue;
-                break;
-            }
-        }
-
-        if (issueToModify) {
-            const index = issueToModify.items.indexOf(itemName);
-            if (index > -1) issueToModify.items.splice(index, 1);
-
-            if (issueToModify.items.length === 0) {
-                db.ref('issues/' + issueToModify.id).remove();
-            } else {
-                db.ref('issues/' + issueToModify.id).set(issueToModify);
-            }
-            alert(`${itemName} wurde zurückgegeben.`);
-        } else {
-            alert("Material nicht gefunden.");
-        }
+    window.selectItemForReturn = function(employeeName, itemName, count, issueIdsArray) {
+        // Für einzelne Artikel: direkt Rückgabe starten (mit Unterschrift)
+        currentReturnEmployee = employeeName;
+        currentReturnItems = [{ name: itemName, count: count, issueIds: issueIdsArray }];
+        showReturnSignaturePanel(employeeName, currentReturnItems);
     };
 
-    window.returnAllItems = function(employeeName) {
-        if (!confirm(`ALLE Materialien von ${employeeName} zurückgeben?`)) return;
-
-        issues.filter(i => i.employee === employeeName).forEach(issue => {
-            db.ref('issues/' + issue.id).remove();
+    window.confirmAllReturn = function() {
+        if (!currentReturnEmployee) return;
+        // Sammle alle Items des Mitarbeiters
+        const employeeIssues = issues.filter(issue => issue.employee === currentReturnEmployee);
+        let itemMap = new Map();
+        employeeIssues.forEach(issue => {
+            if (issue.items) {
+                issue.items.forEach(item => {
+                    if (!itemMap.has(item)) {
+                        itemMap.set(item, {count: 0, issueIds: new Set()});
+                    }
+                    const entry = itemMap.get(item);
+                    entry.count++;
+                    entry.issueIds.add(issue.id);
+                });
+            }
         });
-        alert(`Alle Materialien von ${employeeName} wurden zurückgegeben.`);
+        currentReturnItems = [];
+        for (let [name, data] of itemMap.entries()) {
+            currentReturnItems.push({ name: name, count: data.count, issueIds: Array.from(data.issueIds) });
+        }
+        if (currentReturnItems.length === 0) {
+            alert("Keine Materialien zum Zurückgeben.");
+            return;
+        }
+        showReturnSignaturePanel(currentReturnEmployee, currentReturnItems);
     };
 
-    // Hilfsfunktion zum Escapen von HTML
+    function showReturnSignaturePanel(employeeName, items) {
+        const signatureArea = document.getElementById('returnSignatureArea');
+        signatureArea.classList.remove('hidden');
+        // Initialisiere Return Canvas falls nötig
+        if (!returnCanvas) {
+            returnCanvas = document.getElementById('returnSignaturePad');
+            returnCtx = returnCanvas.getContext('2d');
+            initCanvasEvents(returnCanvas, returnCtx, 'return');
+            resizeCanvas(returnCanvas, returnCtx);
+        } else {
+            resizeCanvas(returnCanvas, returnCtx);
+        }
+        clearReturnSignature();
+        // Optional: Zeige eine kurze Info, welche Materialien zurückgegeben werden
+        const itemList = items.map(i => `${i.name} (${i.count}x)`).join(', ');
+        const infoDiv = document.getElementById('employeeMaterialDisplay');
+        infoDiv.innerHTML += `<div style="margin-top:15px; padding:10px; background:#e9ecef; border-radius:8px;"><strong>⏳ Rückgabe vorbereitet für ${escapeHtml(employeeName)}:</strong><br>${escapeHtml(itemList)}<br><em>Bitte unten unterschreiben und bestätigen.</em></div>`;
+    }
+
+    window.confirmReturnWithSignature = async function() {
+        if (!returnCanvas || isCanvasBlank(returnCanvas, returnCtx)) {
+            alert("Bitte unterschreiben Sie die Rückgabe!");
+            return;
+        }
+        if (!currentReturnEmployee || currentReturnItems.length === 0) {
+            alert("Keine Rückgabe-Artikel ausgewählt.");
+            return;
+        }
+
+        const signatureData = returnCanvas.toDataURL();
+        const returnDate = new Date().toLocaleDateString('de-DE') + " " + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+
+        // Lösche die zugehörigen Items aus den Issues
+        for (let retItem of currentReturnItems) {
+            for (let issueId of retItem.issueIds) {
+                const issueRef = db.ref('issues/' + issueId);
+                const snapshot = await issueRef.once('value');
+                const issue = snapshot.val();
+                if (issue && issue.items) {
+                    // Entferne dieses Item so oft wie benötigt (count mal)
+                    let newItems = [...issue.items];
+                    for (let i = 0; i < retItem.count; i++) {
+                        const index = newItems.indexOf(retItem.name);
+                        if (index !== -1) newItems.splice(index, 1);
+                    }
+                    if (newItems.length === 0) {
+                        await issueRef.remove();
+                    } else {
+                        await issueRef.update({ items: newItems });
+                    }
+                }
+            }
+        }
+
+        // Erstelle PDF der Rückgabe
+        const returnInfo = {
+            employee: currentReturnEmployee,
+            items: currentReturnItems,
+            signature: signatureData,
+            date: returnDate
+        };
+        await generatePDF(null, true, returnInfo);
+
+        // Reset UI
+        document.getElementById('returnSignatureArea').classList.add('hidden');
+        clearReturnSignature();
+        currentReturnItems = [];
+        // Aktualisiere Anzeige
+        showEmployeeMaterials();
+        alert("Rückgabe erfolgreich! Die PDF wurde heruntergeladen.");
+    };
+
     function escapeHtml(str) {
         if (!str) return '';
         return str.replace(/[&<>]/g, function(m) {
@@ -602,21 +663,18 @@
             if (m === '<') return '&lt;';
             if (m === '>') return '&gt;';
             return m;
-        }).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, function(c) {
-            return c;
         });
     }
 
-    // Initialisierung: Canvas vorbereiten und Start im Hauptmenü
+    // Initialisierung
     setTimeout(() => {
         showSection('main');
-        // Canvas initialisieren, falls schon sichtbar (wird erst bei Ausgabe benötigt)
         if (!canvas) {
             canvas = document.getElementById('signaturePad');
             if (canvas) {
                 ctx = canvas.getContext('2d');
-                initCanvasEvents();
-                resizeCanvas();
+                initCanvasEvents(canvas, ctx, 'signature');
+                resizeCanvas(canvas, ctx);
                 clearSignature();
             }
         }
